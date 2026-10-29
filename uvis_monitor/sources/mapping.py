@@ -58,6 +58,23 @@ def _from_number(num: float, fmt: str) -> datetime | None:
     return None
 
 
+def _compact(text: str, service_date: date | None) -> datetime | None:
+    """숫자만으로 된 날짜(YYYYMMDD)·시각(HHMMSS/HHMM). 실제 UVIS 는 biDate/biTime 을 이렇게 따로 준다.
+    시각만 있으면 service_date(또는 fields.date 로 읽은 날짜)와 합친다."""
+    if len(text) == 8:
+        try:
+            return _aware(datetime.strptime(text, "%Y%m%d"))
+        except ValueError:
+            return None
+    if service_date is None:
+        return None
+    try:
+        t = datetime.strptime(text, "%H%M%S" if len(text) == 6 else "%H%M").time()
+    except ValueError:
+        return None
+    return _aware(datetime.combine(service_date, t))
+
+
 def parse_timestamp(value: Any, fmt: str | None = "auto", service_date: date | None = None) -> datetime | None:
     """여러 형식의 시각 값을 KST datetime 으로. 실패하면 None.
 
@@ -78,6 +95,8 @@ def parse_timestamp(value: Any, fmt: str | None = "auto", service_date: date | N
             return _from_number(float(text), fmt)
         except ValueError:
             return None
+    if fmt == "auto" and re.fullmatch(r"\d{4}|\d{6}|\d{8}", text):
+        return _compact(text, service_date)
     if fmt == "auto" and re.fullmatch(r"\d+(\.\d+)?", text) and len(text.split(".")[0]) not in (12, 14):
         return _from_number(float(text), "auto")
     text = text.replace("오전", "AM").replace("오후", "PM")

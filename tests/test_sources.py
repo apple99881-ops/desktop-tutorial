@@ -32,6 +32,24 @@ class MappingTest(unittest.TestCase):
         ps = records_to_positions(recs, {"vehicle_id": "car.no", "timestamp": "dt", "lat": "y", "lon": "x"})
         self.assertEqual((ps[0].vehicle_id, ps[0].lat, ps[0].lon), ("1호차", 37.1, 127.2))  # 뒤바뀐 위경도 자동 교정
 
+    def test_uvis_compact_date_and_time_fields(self):
+        # 실제 UVIS carLocationVehicleList.ajax 형태: 날짜·시각이 따로, biXPosition 이 위도
+        d = date(2026, 10, 29)
+        self.assertEqual(parse_timestamp("20261029"), datetime(2026, 10, 29, tzinfo=KST))
+        self.assertEqual(parse_timestamp("073758", "auto", d), datetime(2026, 10, 29, 7, 37, 58, tzinfo=KST))
+        self.assertEqual(parse_timestamp("1820", "auto", d), datetime(2026, 10, 29, 18, 20, tzinfo=KST))
+        self.assertIsNone(parse_timestamp("073758"))  # 날짜를 모르면 해석하지 않음
+        fields = {"vehicle_id": "cmNumber", "date": "biDate", "timestamp": "biTime",
+                  "lat": "biXPosition", "lon": "biYPosition", "speed": "biGpsSpeed"}
+        recs = [{"cmNumber": "경기70아1001", "biDate": "20261029", "biTime": "160743",
+                 "biXPosition": "37.244984", "biYPosition": "127.043784", "biGpsSpeed": 41},
+                {"cmNumber": "경기70아1002", "biDate": "20261027", "biTime": "203639",  # 이틀 전 마지막 위치
+                 "biXPosition": "37.268644", "biYPosition": "126.999616", "biGpsSpeed": 0}]
+        ps = records_to_positions(recs, fields, service_date=d)
+        self.assertEqual(ps[0].ts, datetime(2026, 10, 29, 16, 7, 43, tzinfo=KST))
+        self.assertEqual((ps[0].lat, ps[0].lon, ps[0].speed_kmh), (37.244984, 127.043784, 41))
+        self.assertEqual(ps[1].ts, datetime(2026, 10, 27, 20, 36, 39, tzinfo=KST))  # 오늘로 착각하지 않음
+
 
 class ExcelTest(unittest.TestCase):
     def setUp(self):

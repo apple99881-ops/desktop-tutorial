@@ -2,6 +2,7 @@
 .env
 config/config.yaml
 config/routes.yaml
+config/routes_uvis_*.yaml
 config/kakao_token.json
 # 실행 결과
 data/

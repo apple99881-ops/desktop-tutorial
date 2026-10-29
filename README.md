@@ -35,6 +35,7 @@ python -m uvis_monitor replay samples\샘플_UVIS_운행경로_2026-10-28.xlsx
 | [02_데이터연동_가이드](docs/02_데이터연동_가이드.md) | 엑셀 / 웹 자동조회(web-probe) / 에스원 API 연결, 에스원 요청 문안 |
 | [03_메신저_설정](docs/03_메신저_설정.md) | 카카오톡·텔레그램·슬랙 설정, 메시지 예시 |
 | [04_설치_운영_가이드](docs/04_설치_운영_가이드.md) | 설치, 작업 스케줄러 등록, 매일/매달 할 일, 문제 해결 |
+| [05_UVIS_실제구조_분석](docs/05_UVIS_실제구조_분석.md) | **실계정으로 확인한** 로그인 흐름, 메뉴·주소, 실시간 위치·노선·정류장·배차 데이터 구조, 다음 개발 후보 |
 
 `samples/` 폴더에 결과물 예시가 있습니다: **일일 보고서**, **월간 집계**(한 달 시뮬레이션), **UVIS 경로조회 엑셀 형태 예시**(실제 UVIS 양식과 다를 수 있음).
 
@@ -52,6 +53,7 @@ python -m uvis_monitor replay samples\샘플_UVIS_운행경로_2026-10-28.xlsx
 | `kakao-auth` / `telegram-chatid` | 메신저 최초 설정 |
 | `inspect-excel 파일` | UVIS 엑셀 구조·열 자동인식 확인 |
 | `web-probe [--url]` | UVIS 웹 데이터 구조 기록 (본인 PC에서 직접 로그인) |
+| `import-routes [--flag 출근/퇴근/전체]` | UVIS 노선관리의 노선·정류장·배차로 routes.yaml 초안 만들기 |
 
 ## 동작 방식
 ```
@@ -74,7 +76,7 @@ uvis_monitor/
   report.py        일일/월간 엑셀 보고서
   storage.py       SQLite 저장소 (positions, point_results, anomalies, alerts, route_days)
   config.py        config.yaml / routes.yaml 로딩 (${환경변수} 치환)
-  sources/         simulator · excel_export · uvis_web(Playwright) · http_api · mapping
+  sources/         simulator · excel_export · uvis_web(Playwright) · uvis_routes(노선 가져오기) · http_api · mapping
   notify/          console · kakao · telegram · webhook
   cli.py           명령어
 ```
@@ -87,9 +89,9 @@ uvis_monitor/
 ```bat
 python -m unittest discover -s tests
 ```
-판정 엔진(정상·출발지연·조기출발·정차지연·미경유·위치미수신·공차회송·드문 위치), 엑셀/CSV/HTML-xls 읽기, 카카오 토큰 갱신·분할 발송, 텔레그램, 보고서, 재시작 복구, 그리고 **가짜 UVIS 사이트를 상대로 한 실제 브라우저 자동조회**까지 37개 테스트가 있습니다.
+판정 엔진(정상·출발지연·조기출발·정차지연·미경유·위치미수신·공차회송·드문 위치), 엑셀/CSV/HTML-xls 읽기, 카카오 토큰 갱신·분할 발송, 텔레그램, 보고서, 재시작 복구, 그리고 **가짜 UVIS 사이트를 상대로 한 실제 브라우저 자동조회**까지 45개 테스트가 있습니다. 가짜 UVIS 사이트는 실제 로그인 흐름(간편 접속·프레임)을 흉내 냅니다.
 
 ## 주의
-- UVIS는 공개 API가 확인되지 않아, 실제 연결(웹 자동조회 주소·필드 이름)은 **본인 계정으로 web-probe 후 설정**해야 합니다. 문서의 주소·필드 이름은 예시입니다.
+- UVIS 웹 자동조회 설정(`config.example.yaml`의 `source.uvis_web`)은 2026-10 실계정으로 확인한 값입니다([05 문서](docs/05_UVIS_실제구조_분석.md)). 화면이 개편되면 `web-probe`로 다시 확인하세요.
 - UVIS 계정 자동조회, 위치정보 메신저 전송이 **회사 보안정책·에스원 약관·위치정보법** 범위 안인지 확인하세요 ([분석 문서 6장](docs/01_UVIS_시스템_분석.md#6-운영상-주의점)).
 - `.env`(비밀번호·토큰), `data/`(운행 데이터)는 외부에 공유하지 마세요.

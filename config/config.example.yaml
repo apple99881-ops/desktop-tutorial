@@ -44,22 +44,27 @@ source:
   simulator:
     seed: 42
 
-  uvis_web:
-    login_url: "https://www.s1uvis.co.kr/"     # web-probe 로 확인한 실제 로그인 주소
-    monitor_url: ""                            # 실시간 위치관제 화면 주소
+  uvis_web:                                    # 2026-10 실제 UVIS 로 확인한 값 (docs/05_UVIS_실제구조_분석.md)
+    login_url: "https://www.u-vis.com/uvis/login.do"
+    monitor_url: "https://www.u-vis.com/uvis/mainFrame.do"   # 첫 화면 = 실시간모니터링 > 차량위치
+    frame_url_contains: "carLocation.do"       # 차량위치 화면은 메인 화면 안의 프레임
     username: ${UVIS_ID}
     password: ${UVIS_PW}
-    selectors:                                 # 로그인 입력칸 (F12 개발자도구로 확인)
-      username: "#userId"
-      password: "#userPw"
-      submit: "button[type=submit]"
+    selectors:                                 # 로그인 입력칸 (생략 시 아래 값)
+      username: "#iUserid"
+      password: "#nPasswd"
+      submit: ".btn-login"
+    # after_login: 로그인 직후 안내 화면 처리 (생략 시 기본값: 비밀번호 변경 안내 '다음에 변경', OTP 화면 '간편 접속')
     mode: network                              # network(데이터 가로채기, 권장) / table(화면 표 읽기)
-    refresh: reload                            # reload / click:<새로고침 버튼 selector> / none
+    # 화면 자체의 새로고침 함수 호출. '그룹별' 체크를 풀어야 전체 차량이 온다 (켜져 있으면 첫 그룹만)
+    refresh: "js:$('#chkUseGroup').prop('checked', false); getDataLoad('', '', '', '', 'N', 'Y')"
     headless: true                             # false 면 브라우저 창이 보임 (처음 시험할 때)
     network:
-      url_contains: ""                         # 위치 데이터 요청 주소의 일부 (web-probe summary.md 참고)
-      records_path: ""                         # 응답 JSON 에서 차량 목록 위치 (예: data.list)
-      fields: {vehicle_id: carNo, timestamp: gpsDt, lat: lat, lon: lng, speed: speed, address: addr}
+      url_contains: "carLocationVehicleList.ajax"
+      records_path: "carList"
+      # biXPosition 이 위도, biYPosition 이 경도 (이름과 반대). 날짜·시각은 따로 옴 (20261029 / 160743)
+      fields: {vehicle_id: cmNumber, date: biDate, timestamp: biTime, lat: biXPosition, lon: biYPosition,
+               speed: biGpsSpeed, address: dbAddress}
       ts_format: auto
     table:
       row_selector: ""                         # 예: "#vehicleGrid tbody tr"
@@ -95,7 +100,7 @@ notify:
       client_secret: ${KAKAO_CLIENT_SECRET:-}
       redirect_uri: "http://localhost:8765/callback"
       token_file: config/kakao_token.json
-      link_url: "https://www.s1uvis.co.kr"    # 메시지 버튼 링크 (카카오 앱 설정의 사이트 도메인에 등록)
+      link_url: "https://www.u-vis.com/uvis/login.do"    # 메시지 버튼 링크 (카카오 앱 설정의 사이트 도메인에 등록)
       button_title: "UVIS 열기"
       levels: [critical, warning, ok]
 

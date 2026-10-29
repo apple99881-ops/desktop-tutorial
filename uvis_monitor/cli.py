@@ -12,6 +12,7 @@
   telegram-chatid  텔레그램 chat_id 확인
   inspect-excel    UVIS 엑셀 파일 구조/열 자동인식 확인
   web-probe        UVIS 웹 화면이 주고받는 데이터 구조 기록 (본인 PC 에서 직접 로그인)
+  import-routes    UVIS 노선관리의 노선·정류장·배차로 routes.yaml 초안 만들기
 """
 from __future__ import annotations
 
@@ -315,6 +316,44 @@ def cmd_web_probe(args) -> int:
     return 0
 
 
+def cmd_import_routes(args) -> int:
+    import json
+
+    import yaml
+
+    from .sources.uvis_routes import build_routes, fetch_uvis_routes
+    from .sources.uvis_web import UvisWebSource
+
+    cfg = _load(args)
+    opts = (cfg.source or {}).get("uvis_web") or {}
+    if not opts.get("monitor_url"):
+        print("config.yaml 의 source.uvis_web (monitor_url, username, password)을 먼저 설정하세요.")
+        return 1
+    flag = {"출근": "1", "퇴근": "2", "전체": None}[args.flag]
+    src = UvisWebSource(opts, state_dir=cfg.database.parent)
+    try:
+        raw = fetch_uvis_routes(src, flag=flag, name_filter=args.name)
+    finally:
+        src.close()
+    raw_path = cfg.database.parent / "uvis_routes_raw.json"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(json.dumps(raw, ensure_ascii=False, indent=1), encoding="utf-8")
+    routes, warnings = build_routes(raw)
+    out = Path(args.out) if args.out else cfg.base_dir / "config" / f"routes_uvis_{args.flag}.yaml"
+    header = (f"# UVIS 노선관리에서 가져온 노선 ({args.flag}, {now_kst():%Y-%m-%d %H:%M})\n"
+              f"# 정류장 계획시각 = 배차 출발시각 + UVIS 정류장 소요분 누적. 'note' 가 있는 노선은 확인하세요.\n"
+              f"# 사용: config.yaml 의 routes_file 을 이 파일로 바꾸거나 routes.yaml 로 복사 → check 로 점검\n")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(header + yaml.safe_dump({"routes": routes}, allow_unicode=True, sort_keys=False, width=200),
+                   encoding="utf-8")
+    print(f"UVIS 노선 {len(raw)}개 → 운행 {len(routes)}건: {out}\n원본: {raw_path}")
+    for w in warnings[:30]:
+        print(f"  ⚠ {w}")
+    if len(warnings) > 30:
+        print(f"  … 외 {len(warnings) - 30}건")
+    return 0
+
+
 # ---------------------------------------------------------------------------- 진입점
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m uvis_monitor", description="에스원 UVIS 통근버스 출근 운행 감시")
@@ -357,10 +396,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("file")
     s.set_defaults(fn=cmd_inspect_excel)
     s = sub.add_parser("web-probe", help="UVIS 웹 데이터 구조 기록")
-    s.add_argument("--url", default="https://www.s1uvis.co.kr/", help="UVIS 로그인 주소")
+    s.add_argument("--url", default="https://www.u-vis.com/uvis/login.do", help="UVIS 로그인 주소")
     s.add_argument("--minutes", type=float, default=10)
     s.add_argument("--out", help="저장 폴더 (기본 data/probe/날짜)")
     s.set_defaults(fn=cmd_web_probe)
+    s = sub.add_parser("import-routes", help="UVIS 노선관리 → routes.yaml 초안")
+    s.add_argument("--flag", choices=["출근", "퇴근", "전체"], default="출근", help="가져올 노선 구분 (기본 출근)")
+    s.add_argument("--name", help="노선명에 이 글자가 든 노선만")
+    s.add_argument("--out", help="저장 파일 (기본 config/routes_uvis_구분.yaml)")
+    s.set_defaults(fn=cmd_import_routes)
     return p
 
 

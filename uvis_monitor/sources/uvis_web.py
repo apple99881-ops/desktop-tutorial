@@ -4,9 +4,10 @@
 화면이 서버에서 받아오는 위치 데이터(JSON)를 가로채거나(network 모드)
 화면의 차량 목록 표를 읽어서(table 모드) 위치를 얻는다.
 
-⚠ UVIS 의 실제 주소·입력칸·데이터 형식은 계정/계약마다 다를 수 있으므로
-   먼저 'python -m uvis_monitor web-probe' 로 본인 PC 에서 구조를 기록한 뒤
-   config.yaml 의 source.uvis_web 항목을 채운다. (docs/02_데이터연동_가이드.md)
+기본값은 2026-10 실제 UVIS(www.u-vis.com/uvis) 로 확인한 구조다 (docs/05_UVIS_실제구조_분석.md):
+  로그인 #iUserid/#nPasswd/.btn-login → (비밀번호 변경 안내 '다음에 변경') → (OTP 화면 '간편 접속')
+  → mainFrame.do 안의 carLocation.do 프레임이 carLocationVehicleList.ajax 로 전체 차량 위치를 받는다.
+⚠ 화면 개편 시 달라질 수 있으므로 'python -m uvis_monitor web-probe' 로 구조를 다시 확인한다.
 ⚠ 회사 보안정책과 에스원 이용약관을 확인하고, 조회 주기는 60초 이상을 권장한다.
 """
 from __future__ import annotations
@@ -22,6 +23,13 @@ from .base import PositionSource
 from .mapping import get_path, records_to_positions
 
 log = logging.getLogger(__name__)
+
+DEFAULT_SELECTORS = {"username": "#iUserid", "password": "#nPasswd", "submit": ".btn-login", "message": "#loginMsg"}
+# 로그인 직후 거치는 안내 화면. url_contains 화면이면 click 을 누르고, accept_dialog 문구가 든 확인창은 수락한다.
+DEFAULT_AFTER_LOGIN = [
+    {"url_contains": "passResetMonth", "click": "button:has-text('다음에 변경')"},  # 비밀번호 주기 변경 안내
+    {"url_contains": "noMask", "click": "#btnCancel", "accept_dialog": "간편 접속"},  # OTP 인증 대신 간편 접속
+]
 
 
 def _require_playwright():
@@ -43,8 +51,9 @@ class UvisWebSource(PositionSource):
             raise ValueError("source.uvis_web.monitor_url(실시간 위치관제 화면 주소)이 필요합니다.")
         self.username = cfg.get("username", "")
         self.password = cfg.get("password", "")
-        self.sel = {"username": "#userId", "password": "#userPw", "submit": "button[type=submit]",
-                    **(cfg.get("selectors") or {})}
+        self.sel = {**DEFAULT_SELECTORS, **(cfg.get("selectors") or {})}
+        self.after_login: list[dict] = cfg.get("after_login", DEFAULT_AFTER_LOGIN) or []
+        self.frame_hint = cfg.get("frame_url_contains", "")  # 데이터·표가 들어 있는 프레임 주소 일부
         self.mode = cfg.get("mode", "network")
         self.net = cfg.get("network") or {}
         self.table = cfg.get("table") or {}
@@ -55,6 +64,7 @@ class UvisWebSource(PositionSource):
         self._pw = self._browser = self._context = self.page = None
         self._captured: list = []
         self._seq = 0
+        self._failed_nav: str | None = None
 
     # ------------------------------------------------------------ 브라우저
     def _start(self) -> None:
@@ -69,9 +79,32 @@ class UvisWebSource(PositionSource):
             ctx["storage_state"] = str(self.state_file)
         self._context = self._browser.new_context(**ctx)
         self.page = self._context.new_page()
-        self.page.on("response", self._on_response)
+        self.page.on("response", self._on_response)  # 프레임 안에서 오는 응답도 포함
+        self.page.on("dialog", self._on_dialog)
+        self.page.on("requestfailed", self._on_request_failed)
         self.page.goto(self.monitor_url, wait_until="domcontentloaded")
+        self._recover_http()
         self._login_if_needed()
+
+    def _on_request_failed(self, req) -> None:
+        if req.is_navigation_request() and req.frame == self.page.main_frame:
+            self._failed_nav = req.url
+
+    def _recover_http(self) -> None:
+        """실제 UVIS 는 세션 만료·간편 접속 때 http:// 주소로 돌려보낸다. http 가 막힌 환경(사내망·클라우드)에서
+        그 이동이 실패하면 같은 주소를 https 로 다시 연다."""
+        failed, self._failed_nav = self._failed_nav, None
+        if failed and failed.startswith("http://") and self.page.url.startswith("chrome-error"):
+            log.info("http 이동 실패 → https 로 다시 열기: %s", failed)
+            self.page.goto("https://" + failed[len("http://"):], wait_until="domcontentloaded")
+
+    def _on_dialog(self, dialog) -> None:
+        accept = any(s.get("accept_dialog") and s["accept_dialog"] in dialog.message for s in self.after_login)
+        log.info("UVIS 대화상자 %s: %s", "수락" if accept else "닫음", dialog.message[:80])
+        try:
+            dialog.accept() if accept else dialog.dismiss()
+        except Exception:
+            pass
 
     def _on_response(self, resp) -> None:
         pattern = self.net.get("url_contains")
@@ -80,29 +113,87 @@ class UvisWebSource(PositionSource):
             self._captured.append((self._seq, resp))
             del self._captured[:-5]
 
+    def _on_login_page(self) -> bool:
+        page = self.page
+        return all(page.locator(self.sel[k]).count() > 0 and page.locator(self.sel[k]).first.is_visible()
+                   for k in ("username", "password"))
+
+    def _settle(self, before_url: str) -> None:
+        """클릭 후 화면이 바뀌고 안정될 때까지 기다린다 (안 바뀌면 그대로 둔다: 로그인 실패 등)."""
+        timeout = self.wait_sec * 1000
+        try:
+            self.page.wait_for_url(lambda u: u != before_url, timeout=timeout)
+        except Exception:
+            pass
+        self._recover_http()
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=timeout)
+        except Exception:
+            pass
+
+    def _pass_after_login_pages(self) -> None:
+        for _ in range(len(self.after_login) + 1):
+            step = next((s for s in self.after_login if s.get("url_contains") and s["url_contains"] in self.page.url), None)
+            if not step:
+                return
+            log.info("로그인 후 안내 화면 통과: %s → %s", step["url_contains"], step.get("click"))
+            before = self.page.url
+            try:
+                self.page.click(step["click"], timeout=self.wait_sec * 1000)
+            except Exception as exc:
+                raise RuntimeError(f"로그인 후 안내 화면({step['url_contains']}) 처리 실패: {exc}") from exc
+            self._settle(before)
+
     def _login_if_needed(self) -> None:
         page = self.page
-        if page.locator(self.sel["password"]).count() == 0:
+        self._pass_after_login_pages()
+        if not self._on_login_page():
             return
         if not self.username or not self.password:
             raise RuntimeError("UVIS 로그인이 필요하지만 UVIS_ID/UVIS_PW 환경변수(.env)가 비어 있습니다.")
         log.info("UVIS 로그인 시도")
         page.fill(self.sel["username"], self.username)
         page.fill(self.sel["password"], self.password)
+        before = page.url
         page.click(self.sel["submit"])
-        page.wait_for_load_state("networkidle", timeout=self.wait_sec * 1000)
-        if page.locator(self.sel["password"]).count() > 0 and page.locator(self.sel["password"]).first.is_visible():
-            raise RuntimeError("UVIS 로그인 실패 – 아이디/비밀번호 또는 selectors 설정을 확인하세요.")
-        if self.login_url != self.monitor_url or page.url.rstrip("/") != self.monitor_url.rstrip("/"):
+        self._settle(before)
+        self._pass_after_login_pages()
+        if self._on_login_page():
+            msg = ""
+            if self.sel.get("message") and page.locator(self.sel["message"]).count():
+                msg = " (" + " ".join(page.locator(self.sel["message"]).first.inner_text().split())[:120] + ")"
+            raise RuntimeError(f"UVIS 로그인 실패{msg} – 아이디/비밀번호 또는 selectors 설정을 확인하세요.")
+        # 실제 UVIS 는 간편 접속 뒤 http:// 주소로 보내는데, 그 주소가 막힌 환경도 있어 감시 화면을 직접 다시 연다
+        if page.url.split("?")[0].rstrip("/") != self.monitor_url.split("?")[0].rstrip("/"):
             page.goto(self.monitor_url, wait_until="domcontentloaded")
+            self._recover_http()
+            try:
+                page.wait_for_load_state("networkidle", timeout=self.wait_sec * 1000)
+            except Exception:
+                pass
+        if self._on_login_page():
+            raise RuntimeError("UVIS 로그인 후에도 로그인 화면으로 돌아옵니다 – 로그인 후 안내 화면(after_login) 설정을 확인하세요.")
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         self._context.storage_state(path=str(self.state_file))
+
+    def _target(self):
+        """데이터·표가 있는 프레임 (frame_url_contains 미지정 시 페이지 자체)."""
+        if not self.frame_hint:
+            return self.page
+        for fr in self.page.frames:
+            if self.frame_hint in fr.url:
+                return fr
+        raise RuntimeError(f"'{self.frame_hint}' 프레임을 찾지 못했습니다 (감시 화면 주소/구성을 확인하세요).")
 
     def _do_refresh(self) -> None:
         if self.refresh == "reload":
             self.page.reload(wait_until="domcontentloaded")
         elif self.refresh.startswith("click:"):
-            self.page.click(self.refresh[len("click:"):])
+            self._target().click(self.refresh[len("click:"):])
+        elif self.refresh.startswith("js:"):  # 화면 자체의 새로고침 함수 호출 (UVIS: getDataLoad)
+            self._login_if_needed()
+            self._target().evaluate("() => {" + self.refresh[len("js:"):] + "\n}")
+            return
         # "none": 화면이 스스로 주기적으로 갱신하는 경우 기다리기만 한다
         self._login_if_needed()
 
@@ -147,8 +238,9 @@ class UvisWebSource(PositionSource):
         if not row_sel or not cols:
             raise ValueError("source.uvis_web.table.row_selector / columns 가 필요합니다.")
         self._do_refresh()
-        self.page.wait_for_selector(row_sel, timeout=self.wait_sec * 1000)
-        rows = self.page.eval_on_selector_all(
+        target = self._target()
+        target.wait_for_selector(row_sel, timeout=self.wait_sec * 1000)
+        rows = target.eval_on_selector_all(
             row_sel, "rows => rows.map(r => Array.from(r.querySelectorAll('td,th')).map(c => c.innerText.trim()))")
         records = [{f: (r[i] if i < len(r) else None) for f, i in cols.items()} for r in rows]
         return records_to_positions(records, {f: f for f in cols}, self.table.get("ts_format", "auto"),
