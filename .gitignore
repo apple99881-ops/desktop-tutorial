@@ -1,0 +1,2 @@
+# 로컬 환경 변수 (UVIS_ID, UVIS_PW 등 비밀 정보)
+.env
