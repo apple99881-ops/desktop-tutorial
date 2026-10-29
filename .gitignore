@@ -1,0 +1,14 @@
+# 비밀값·개인 설정
+.env
+config/config.yaml
+config/routes.yaml
+config/kakao_token.json
+# 실행 결과
+data/
+reports/
+logs/
+# 파이썬
+__pycache__/
+*.pyc
+.venv/
+*.zip

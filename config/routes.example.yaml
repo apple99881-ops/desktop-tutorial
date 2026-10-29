@@ -1,0 +1,105 @@
+# =====================================================================
+#  노선 정의 – 출근 운행 1회 = 노선 1개
+#  사용법: routes.yaml 로 복사한 뒤 실제 노선으로 바꾸세요.
+#
+#  - vehicle_id : UVIS 화면/엑셀에 나오는 차량 이름과 똑같이 (예: 경기70아1234)
+#  - 좌표       : 카카오맵/네이버지도에서 정류장 위치 우클릭 → 좌표 복사 (위도, 경도)
+#                 또는 UVIS 의 정류장 관리 화면 좌표
+#  - time       : 계획 시각 "HH:MM" (따옴표 권장)
+#  - radius_m   : 도착 판정 반경. 생략하면 config.yaml 의 default_radius_m
+#  - rules      : 이 노선만 기준을 다르게 할 때
+#  - scenario   : 시뮬레이터(demo) 전용 – 실제 운영에서는 지워도 됩니다
+#
+#  ※ 아래 좌표/시각은 수원·화성·용인 일대를 가정한 '예시'입니다.
+#  입력 후 'python -m uvis_monitor check' 로 오류를 점검하세요.
+# =====================================================================
+
+routes:
+  - id: R01
+    name: 1호차 수원역
+    vehicle_id: 경기70아1001
+    driver: 김기사
+    phone: 010-0000-0001
+    weekdays: [월, 화, 수, 목, 금]
+    scenario: normal
+    origin:      {name: 수원역 4번출구,  lat: 37.26640, lon: 127.00010, time: "06:40", radius_m: 150}
+    stops:
+      - {name: 수원시청역,   lat: 37.26170, lon: 127.03100, time: "06:52"}
+      - {name: 매탄권선역,   lat: 37.25230, lon: 127.04050, time: "06:58"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:10", radius_m: 200}
+
+  - id: R02
+    name: 2호차 동탄
+    vehicle_id: 경기70아1002
+    driver: 이기사
+    scenario: departure_delay
+    origin:      {name: 동탄역 환승센터, lat: 37.20010, lon: 127.09600, time: "06:35"}
+    stops:
+      - {name: 동탄센트럴파크, lat: 37.20540, lon: 127.07280, time: "06:43"}
+      - {name: 병점역,         lat: 37.20690, lon: 127.03330, time: "06:55"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:15", radius_m: 200}
+
+  - id: R03
+    name: 3호차 분당 서현
+    vehicle_id: 경기70아1003
+    driver: 박기사
+    scenario: stop_delay
+    origin:      {name: 서현역 1번출구, lat: 37.38510, lon: 127.12330, time: "06:15"}
+    stops:
+      - {name: 정자역,     lat: 37.36700, lon: 127.10800, time: "06:25"}
+      - {name: 미금역,     lat: 37.35020, lon: 127.10900, time: "06:32"}
+      - {name: 수지구청역, lat: 37.32240, lon: 127.09530, time: "06:42"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:10", radius_m: 200}
+
+  - id: R04
+    name: 4호차 영통
+    vehicle_id: 경기70아1004
+    driver: 최기사
+    scenario: early_departure
+    origin:      {name: 영통역 2번출구, lat: 37.25150, lon: 127.07160, time: "06:50"}
+    stops:
+      - {name: 청명역,     lat: 37.25950, lon: 127.07860, time: "06:56"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:08", radius_m: 200}
+
+  - id: R05
+    name: 5호차 광교
+    vehicle_id: 경기70아1005
+    driver: 정기사
+    scenario: skip_stop
+    origin:      {name: 상현역,         lat: 37.29770, lon: 127.06970, time: "06:40"}
+    stops:
+      - {name: 광교중앙역,  lat: 37.28860, lon: 127.05170, time: "06:48"}
+      - {name: 아주대삼거리, lat: 37.27680, lon: 127.04440, time: "06:55"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:08", radius_m: 200}
+
+  - id: R06
+    name: 6호차 인계동
+    vehicle_id: 경기70아1006
+    driver: 강기사
+    scenario: no_signal
+    origin:      {name: 인계동 나혜석거리, lat: 37.26400, lon: 127.03270, time: "06:45"}
+    stops:
+      - {name: 수원월드컵경기장, lat: 37.28630, lon: 127.03690, time: "06:55"}
+      - {name: 동수원사거리,   lat: 37.27000, lon: 127.04700, time: "07:03"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:12", radius_m: 200}
+
+  - id: R07
+    name: 7호차 오산
+    vehicle_id: 경기70아1007
+    driver: 윤기사
+    scenario: not_departed
+    origin:      {name: 오산역 환승센터, lat: 37.14530, lon: 127.06670, time: "06:20"}
+    stops:
+      - {name: 세마역, lat: 37.18740, lon: 127.04320, time: "06:32"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:00", radius_m: 200}
+
+  - id: R08
+    name: 8호차 구운동
+    vehicle_id: 경기70아1008
+    driver: 한기사
+    scenario: normal
+    origin:      {name: 구운동 사거리, lat: 37.28030, lon: 126.98580, time: "06:35"}
+    stops:
+      - {name: 화서역,     lat: 37.28420, lon: 126.98990, time: "06:42"}
+      - {name: 수원종합운동장, lat: 37.29890, lon: 127.01100, time: "06:52"}
+    destination: {name: 사업장 정문,    lat: 37.25800, lon: 127.05300, time: "07:12", radius_m: 200}

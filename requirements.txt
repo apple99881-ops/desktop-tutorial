@@ -1,0 +1,8 @@
+# 필수
+openpyxl>=3.1
+PyYAML>=6.0
+requests>=2.28
+# UVIS 웹 자동조회(uvis_web, web-probe)용 – 설치 후 'python -m playwright install chromium'
+playwright>=1.40
+# 구형 .xls(진짜 엑셀 97-2003 형식) 파일을 읽을 때만 필요
+# xlrd>=2.0

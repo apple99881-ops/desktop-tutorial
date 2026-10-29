@@ -1,0 +1,110 @@
+# =====================================================================
+#  UVIS 통근버스 출근 운행 감시 – 설정 파일
+#  사용법: 이 파일을 config.yaml 로 복사한 뒤 수정하세요.
+#  비밀번호/토큰은 여기에 직접 쓰지 말고 .env 파일에 쓰고 ${이름} 으로 불러옵니다.
+# =====================================================================
+
+routes_file: config/routes.yaml      # 노선 정의 (routes.example.yaml 참고)
+database: data/uvis_monitor.db       # 감시 결과 누적 DB
+report_dir: reports                  # 엑셀 보고서 저장 폴더
+log_dir: logs
+
+monitor:
+  start: "06:00"                     # 매일 감시 시작 (첫 출발 40분 전 정도)
+  end: "09:30"                       # 감시 종료 → 엑셀 보고서 생성·요약 발송
+  poll_interval_sec: 60              # 위치 조회 주기(초). UVIS 부하를 고려해 60초 이상 권장
+  weekdays: [월, 화, 수, 목, 금]
+  holidays:                          # 쉬는 날 (감시 안 함)
+    - 2026-12-25
+    - 2027-01-01
+  status_digest_min: 0               # N분마다 전체 현황판 발송 (0=끔, 예: 30)
+  notify_normal_departure: false     # true 면 정상 출발도 알림
+
+rules:                               # 이상 판정 기준 (노선별로 routes.yaml 에서 덮어쓰기 가능)
+  departure_delay_min: 5             # 기점 출발 5분 이상 지연 → 🚨 이상
+  departure_caution_min: 3           # 3분 이상 → 보고서 '주의'
+  early_departure_min: 3             # 3분 이상 조기 출발 → 이상 (안 쓰려면 null)
+  stop_delay_min: 10                 # 정차지/종점 10분 이상 지연 → 🚨 이상
+  stop_caution_min: 5                # 5분 이상 → 보고서 '주의'
+  no_signal_min: 10                  # 운행 중 10분 이상 위치 미수신 → 알림
+  default_radius_m: 150              # 지점 도착 판정 반경(m). 도심 GPS 오차 고려 100~200 권장
+  departure_confirm_m: 300           # 기점에서 이만큼 멀어지면 출발 확정
+  pre_departure_window_min: 40       # 계획 출발 40분 전부터 기점 감시
+
+# ---------------------------------------------------------------------
+#  데이터 소스 (type 하나 선택)
+#   simulator : 가상 데이터 (시험용)
+#   uvis_web  : UVIS 웹 자동 조회 (실시간) – docs/02_데이터연동_가이드.md
+#   excel     : UVIS 엑셀 다운로드 폴더 감시 / 재분석
+#   http_api  : 에스원 제공 API 등 JSON 주소
+# ---------------------------------------------------------------------
+source:
+  type: simulator
+
+  simulator:
+    seed: 42
+
+  uvis_web:
+    login_url: "https://www.s1uvis.co.kr/"     # web-probe 로 확인한 실제 로그인 주소
+    monitor_url: ""                            # 실시간 위치관제 화면 주소
+    username: ${UVIS_ID}
+    password: ${UVIS_PW}
+    selectors:                                 # 로그인 입력칸 (F12 개발자도구로 확인)
+      username: "#userId"
+      password: "#userPw"
+      submit: "button[type=submit]"
+    mode: network                              # network(데이터 가로채기, 권장) / table(화면 표 읽기)
+    refresh: reload                            # reload / click:<새로고침 버튼 selector> / none
+    headless: true                             # false 면 브라우저 창이 보임 (처음 시험할 때)
+    network:
+      url_contains: ""                         # 위치 데이터 요청 주소의 일부 (web-probe summary.md 참고)
+      records_path: ""                         # 응답 JSON 에서 차량 목록 위치 (예: data.list)
+      fields: {vehicle_id: carNo, timestamp: gpsDt, lat: lat, lon: lng, speed: speed, address: addr}
+      ts_format: auto
+    table:
+      row_selector: ""                         # 예: "#vehicleGrid tbody tr"
+      columns: {vehicle_id: 0, timestamp: 1, lat: 2, lon: 3}
+
+  excel:
+    watch_dir: data/uvis_download              # 이 폴더의 최신 엑셀을 매 주기 다시 읽음
+    pattern: "*.xls*"
+    default_vehicle: ""                        # 파일에 차량 열이 없을 때 차량번호
+    # columns: {vehicle_id: 차량번호, timestamp: 수신일시, lat: 위도, lon: 경도, speed: 속도, address: 주소}
+
+  http_api:
+    url: ""
+    method: GET
+    headers: {Authorization: "Bearer ${UVIS_API_TOKEN}"}
+    records_path: data
+    fields: {vehicle_id: vehicleNo, timestamp: gpsTime, lat: latitude, lon: longitude, speed: speed}
+    ts_format: auto
+
+# ---------------------------------------------------------------------
+#  알림 채널 (여러 개 동시 사용 가능, 필요 없는 채널은 enabled: false)
+#  levels: critical(🚨 지연·미출발) warning(⚠️ 지연확정·미경유·미수신) ok(✅ 해소) info(ℹ️)
+# ---------------------------------------------------------------------
+notify:
+  start_message: true          # 매일 감시 시작 시 '감시 시작' 메시지
+  send_report_file: true       # 감시 종료 후 엑셀 파일 발송 (텔레그램만 지원)
+  channels:
+    - type: console
+
+    - type: kakao              # 카카오톡 '나에게 보내기'
+      enabled: false
+      rest_api_key: ${KAKAO_REST_API_KEY}
+      client_secret: ${KAKAO_CLIENT_SECRET:-}
+      redirect_uri: "http://localhost:8765/callback"
+      token_file: config/kakao_token.json
+      link_url: "https://www.s1uvis.co.kr"    # 메시지 버튼 링크 (카카오 앱 설정의 사이트 도메인에 등록)
+      button_title: "UVIS 열기"
+      levels: [critical, warning, ok]
+
+    - type: telegram           # 텔레그램 봇 (엑셀 파일 수신, /현황 명령 가능)
+      enabled: false
+      bot_token: ${TELEGRAM_BOT_TOKEN}
+      chat_id: ${TELEGRAM_CHAT_ID}
+
+    - type: webhook            # 슬랙/디스코드/팀즈
+      enabled: false
+      format: slack            # slack / discord / teams / generic
+      url: ${WEBHOOK_URL}
