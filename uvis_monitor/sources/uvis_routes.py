@@ -20,6 +20,8 @@ from ..geo import haversine_m
 log = logging.getLogger(__name__)
 
 FLAG_NAMES = {"1": "출근", "2": "퇴근"}
+# 퇴근 노선 기점 이름 예: "(출발10분전)OO청(임시주차장)" – 배차 시각은 집결 시각이고 출발은 N분 뒤 (2026-10-29 실운행 확인)
+DEPART_AFTER = re.compile(r"출발\s*(\d+)\s*분\s*전")
 WEEKDAY_KO = "월화수목금토일"
 LIST_EP, STATION_EP, TIME_EP, INFO_EP = ("routeList.json", "routeStationList.json",
                                          "routeStationTimeList.json", "routeInfo.ajax")
@@ -123,12 +125,14 @@ def _radii(points: list[dict], max_m: float, min_m: float) -> list[float | None]
 
 
 def build_routes(raw_routes: list[dict], merge_m: float = 30, radius_m: float = 150,
-                 min_radius_m: float = 60) -> tuple[list[dict], list[str]]:
+                 min_radius_m: float = 100) -> tuple[list[dict], list[str]]:
     """fetch_uvis_routes 결과 → routes.yaml 의 routes 목록과 경고 목록.
 
-    배차 1건 = 노선 1개(운행 1회). 정류장 계획시각 = 배차 출발시각(rtStart) + rdArrTime 누적(분).
+    배차 1건 = 노선 1개(운행 1회). 정류장 계획시각 = 배차 시각(rtStart) + rdArrTime 누적(분).
+    기점 이름에 '(출발N분전)'이 있으면 기점 출발만 N분 늦춘다 (정류장 시각은 집결 시각 기준 누적이 실제와 맞았음).
     같은 정류장이 연달아 등록된 경우(UVIS 에 흔함)는 하나로 합친다.
     UVIS 정류장은 200~300m 간격인 곳이 많아, 이웃과 겹치지 않게 반경을 줄인다 (radius_m 상한, min_radius_m 하한).
+    실운행에서 정류장 좌표가 도로에서 100m 넘게 떨어진 곳이 있어 하한을 너무 낮추면 도착을 놓친다.
     """
     routes, warnings = [], []
     for item in raw_routes:
@@ -157,6 +161,8 @@ def build_routes(raw_routes: list[dict], merge_m: float = 30, radius_m: float = 
             warnings.append(f"[{rname}] 정류장이 2개 미만이라 건너뜀")
             continue
         radii = _radii([p for p, _ in merged], radius_m, min_radius_m)
+        m_dep = DEPART_AFTER.search(merged[0][0]["name"])
+        dep_after = int(m_dep.group(1)) if m_dep else 0
         for k, t in enumerate(times, 1):
             start, end = _hhmm(t.get("rtStart")), _hhmm(t.get("rtEnd"))
             if start is None:
@@ -173,9 +179,10 @@ def build_routes(raw_routes: list[dict], merge_m: float = 30, radius_m: float = 
             if wnote:
                 notes.append(wnote)
             vehicle = str(t.get("cmNumber") or "").strip()
+            offs = [dep_after] + [max(m, dep_after) for _, m in merged[1:]]  # 출발보다 이른 정류장 시각은 출발 시각으로
             pts = [{"name": p["name"], "lat": p["lat"], "lon": p["lon"],
                     "time": (start + timedelta(minutes=m)).strftime("%H:%M"), **({"radius_m": rr} if rr else {})}
-                   for (p, m), rr in zip(merged, radii)]
+                   for (p, _), m, rr in zip(merged, offs, radii)]
             route = {
                 "id": f"U{r['rmIdx']}" + (f"-{k}" if len(times) > 1 else ""),
                 "name": f"[{flag}] {rname}" + (f" {start:%H:%M}" if len(times) > 1 else ""),
@@ -185,6 +192,8 @@ def build_routes(raw_routes: list[dict], merge_m: float = 30, radius_m: float = 
                 "uvis": {"rmIdx": r["rmIdx"], "rtKey": t.get("rtKey"), "flag": flag,
                          "rtStart": t.get("rtStart"), "rtEnd": t.get("rtEnd"), "day": _text(t.get("rtDayName"))},
             }
+            if dep_after:
+                route["uvis"]["depart_after_min"] = dep_after  # 배차 시각 = 집결, 출발 = +N분
             if not vehicle:
                 route["enabled"] = False
                 notes.append("UVIS 배차에 차량이 없어 꺼 둠 (vehicle_id 입력 후 enabled 삭제)")
@@ -192,4 +201,12 @@ def build_routes(raw_routes: list[dict], merge_m: float = 30, radius_m: float = 
                 route["note"] = " / ".join(notes)
                 warnings.extend(f"[{rname}] {n}" for n in notes)
             routes.append(route)
+    # 같은 차량이 같은 시각 배차에 여러 번 등록된 경우 (UVIS 배차표 정리 필요 – 한 대는 한 번만 출발 가능)
+    seen: dict[tuple[str, str], list[str]] = {}
+    for rt in routes:
+        if rt["vehicle_id"] != "미배정":
+            seen.setdefault((rt["vehicle_id"], rt["origin"]["time"]), []).append(rt["id"])
+    for (vid, hhmm), ids in seen.items():
+        if len(ids) > 1:
+            warnings.append(f"같은 차량 {vid} 이(가) {hhmm} 출발 배차 {len(ids)}건({', '.join(ids)})에 중복 등록 – UVIS 배차 확인 필요")
     return routes, warnings

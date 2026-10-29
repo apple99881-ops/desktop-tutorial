@@ -48,6 +48,20 @@ class BuildRoutesTest(unittest.TestCase):
         self.assertIn("차량이 없어", b["note"])
         self.assertTrue(any("배차없음" in w and "건너뜀" in w for w in warnings))
 
+    def test_departure_after_gathering_and_duplicate_vehicle(self):
+        # 실제 퇴근 노선: 기점 이름 "(출발10분전)…" – 배차 18:20 은 집결, 출발은 18:30. 정류장 시각은 그대로
+        raw = [dict(RAW[0], stations=[dict(s) for s in RAW[0]["stations"]],
+                    times=[dict(RAW[0]["times"][0], rtKey="1"), dict(RAW[0]["times"][0], rtKey="2")])]
+        raw[0]["stations"][0]["siName"] = "&#40;출발10분전&#41;본관&#40;임시주차장&#41;"
+        raw[0]["stations"][2]["rdArrTime"] = "5"  # 집결 5분 뒤 정류장 → 출발(10분)보다 앞서면 출발 시각으로
+        routes, warnings = build_routes(raw)
+        a = routes[0]
+        self.assertEqual(a["origin"]["name"], "(출발10분전)본관(임시주차장)")
+        self.assertEqual([a["origin"]["time"]] + [s["time"] for s in a["stops"]] + [a["destination"]["time"]],
+                         ["18:30", "18:30", "18:55", "19:05"])
+        self.assertEqual(a["uvis"]["depart_after_min"], 10)
+        self.assertTrue(any("중복 등록" in w and "U9043-1, U9043-2" in w for w in warnings))
+
     def test_output_loads_as_routes_file(self):
         routes, _ = build_routes(RAW)
         with tempfile.TemporaryDirectory() as td:
