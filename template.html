@@ -353,7 +353,8 @@ const mdw = d => md(d)+'('+WK[d.getDay()]+')';
 const gen = new Date(B.generated+'T00:00:00');
 const nowD = new Date(); nowD.setHours(0,0,0,0);
 const today = nowD>gen ? nowD : gen;               // 갱신이 늦어도 '오늘'은 실제 날짜 기준
-const staleDays = Math.round((today-gen)/864e5);
+const upd = B.updated_at ? new Date(B.updated_at.replace(' ','T')+':00+09:00') : gen;
+const staleH = Math.floor((Date.now()-upd)/36e5);   // 마지막 갱신 후 지난 시간
 const dd = d => Math.round((d-today)/864e5);
 const items = B.items.filter(it=>!(it.listing && D(it.listing)<today));   // 이미 상장이 지난 종목은 숨김
 const TAX0 = 0.0022, FEE0 = 2000;
@@ -433,7 +434,7 @@ function phase(it){
 }
 
 // ---------- 헤더 · 시장 ----------
-$('#stamp').innerHTML = `${esc(B.updated_at||B.generated)} 갱신` + (staleDays>=2 ? `<br><b style="color:var(--up)">${staleDays}일째 갱신되지 않았습니다</b>` : '');
+$('#stamp').innerHTML = `${esc(B.updated_at||B.generated)} 갱신` + (staleH>=12 ? `<br><b style="color:var(--up)">${staleH>=48?Math.floor(staleH/24)+'일':staleH+'시간'}째 갱신되지 않았습니다</b>` : '');
 function spark(vals){
   const w=300,h=44,mn=Math.min(...vals),mx=Math.max(...vals), x=i=>i/(vals.length-1)*w, y=v=>h-4-(v-mn)/(mx-mn||1)*(h-8);
   const pts=vals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
@@ -723,5 +724,24 @@ $('#setCash').value=S.cash; $('#setLoan').value=S.loan; $('#setRate').value=S.ra
 
 function renderAll(){ renderMkt(); renderToday(); renderRules(); renderCards(); fillStockSel(); fillCalc(); calc(); fillScoreSel(); renderTabs(); }
 applyOv(); renderStatic(); renderAll(); resetScorer(); runScore();
+
+// ---------- 열 때마다 최신 확인 (github.io 에서만) ----------
+// 홈 화면 앱이나 브라우저가 예전 페이지를 기억하고 있어도, 화면이 다시 보일 때 서버의 최신본과 비교해 바뀌었으면 새로 연다.
+(function(){
+  if(!/\.github\.io$/.test(location.hostname)) return;
+  let last=0;
+  async function check(){
+    if(Date.now()-last<60e3) return; last=Date.now();
+    try{
+      const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
+      if(!r.ok) return;
+      const m=(await r.text()).match(/"updated_at":"([^"]+)"/);
+      if(m && m[1]!==B.updated_at) location.replace(location.pathname+'?v='+encodeURIComponent(m[1])+location.hash);
+    }catch(e){}
+  }
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') check(); });
+  window.addEventListener('pageshow',e=>{ if(e.persisted){ last=0; check(); } });
+  check();
+})();
 })();
 </script>
