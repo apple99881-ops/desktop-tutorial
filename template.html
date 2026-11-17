@@ -344,7 +344,7 @@ function verdict(it){
     return {tier:t, why};
   }
   if(it.offer_fixed && it.offer && it.band_lo && it.offer<it.band_lo) return {tier:'pass', why:`공모가가 희망가 하단(${won(it.band_lo)}원) 아래로 확정됐습니다`};
-  return {tier:'wait', why:`수요예측 결과가 나오면 채점합니다 (${it.fcst_end?('마감 '+it.fcst_end.slice(5)):'일정 미정'})`};
+  return {tier:'wait', why:`수요예측 결과가 공시되면 자동으로 채점됩니다 (${it.fcst_end?('마감 '+it.fcst_end.slice(5)):'일정 미정'})`};
 }
 function sellHow(it){
   if(it.sell_plan && !it.userScored) return it.sell_plan.how;
@@ -417,13 +417,13 @@ function buildActs(){
     }
     if(s && e && dd(e)>=0 && dd(s)<=H){
       const d = s<today?today:s, rng=`${md(s)}~${md(e)}`;
-      if(v.tier==='wait'){ if(!(f && f<today && s>today)) A.push({d,k:'check',i,t:`청약 ${rng}. 수요예측 결과를 채점한 뒤에 넣을지 정합니다.`}); }
+      if(v.tier==='wait'){ if(!(f && f<today && s>today)) A.push({d,k:'check',i,t:`청약 ${rng}. 수요예측 결과가 공시되면 자동으로 결론이 붙습니다.`}); }
       else if(v.tier==='eq') A.push({d,k:'sub',i,t:`${br}에서 10주, <b class="num">${won(p.minDep)}원</b>만 청약 (${rng}, 마감일 16시 전). 더 넣지 않습니다.`});
       else if(v.tier==='prop') A.push({d,k:'sub',i,t:`${br}에서 <b class="num">${man(p.dep)}원</b> 청약 (${rng}). ${p.loanUse?`마통 ${man(p.loanUse)}원 포함, 이자 약 ${won(p.interest)}원.`:`현금만 사용, 마통은 쓰지 않습니다.`} 마감일 오후에 넣으면 이자가 줄어듭니다.`});
       else A.push({d,k:'pass',i,t:`청약 ${rng}. 넣지 않습니다. ${esc(v.why)}.`});
     }
     if(v.tier==='wait' && f){
-      if(f<today && s && s>today) A.push({d:today,k:'check',i,t:`청약 ${md(s)}~${md(e)} 전에 수요예측 결과(기관경쟁률·확약률·확정공모가)를 채점기에 넣으세요. 넣으면 청약 여부와 금액이 바로 나옵니다.`});
+      if(f<today && s && s>today) A.push({d:today,k:'check',i,t:`청약 ${md(s)}~${md(e)}. 수요예측 결과가 아직 공시에 올라오지 않았습니다. 올라오면 다음 자동 갱신 때 점수와 금액이 붙습니다. 먼저 알게 되면 채점기에 직접 넣어도 됩니다.`});
     }
   });
   A.sort((a,b)=>a.d-b.d||KO[a.k]-KO[b.k]);
