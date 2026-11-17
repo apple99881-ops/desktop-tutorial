@@ -1,0 +1,40 @@
+name: 보드 자동 갱신
+
+on:
+  schedule:
+    # 한국시간 07:10 / 12:40 / 18:40 / 21:40 (GitHub 예약은 UTC, 몇 분~수십 분 늦을 수 있음)
+    - cron: "10 22 * * *"
+    - cron: "40 3 * * *"
+    - cron: "40 9 * * *"
+    - cron: "40 12 * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/**"
+      - "template.html"
+      - "data/base.json"
+      - ".github/workflows/update.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: 공시·지수 수집 후 index.html 다시 만들기
+        run: python3 scripts/update.py
+      - name: 바뀐 내용 저장
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && { echo "변경 없음"; exit 0; }
+          git commit -m "보드 자동 갱신 $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M')"
+          git push
