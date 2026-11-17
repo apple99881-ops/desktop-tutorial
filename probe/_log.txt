@@ -1,0 +1,14 @@
+38_r1.html	200	71450	text/html; charset=euc_kr	no-dh
+38_r.html	200	69133	text/html; charset=euc_kr	no-dh
+38_k.html	200	76362	text/html; charset=euc_kr	no-dh
+38_nw.html	200	80189	text/html; charset=euc_kr	no-dh
+38_v_2349.html	200	245636	text/html; charset=euc_kr	no-dh
+38_v_2338.html	200	271626	text/html; charset=euc_kr	no-dh
+38_k_p2.html	200	76642	text/html; charset=euc_kr	no-dh
+38_r1_p2.html	200	71562	text/html; charset=euc_kr	no-dh
+38_nw_p2.html	200	80498	text/html; charset=euc_kr	no-dh
+38_v_2321.html	200	362642	text/html; charset=euc_kr	no-dh
+naver_fchart_kosdaq.xml	200	20948	text/xml;charset=EUC-KR	default
+naver_fchart_kospi.xml	200	21710	text/xml;charset=EUC-KR	default
+naver_api_kosdaq.json	200	17957	application/json;charset=UTF-8	default
+naver_m_kosdaq.json	200	15071	application/json;charset=UTF-8	default
