@@ -1,5 +1,28 @@
-# Welcome to GitHub Desktop!
+# 공모주 당일매도 보드
 
-This is your README. READMEs are where you can communicate what your project is and how to use it.
+청약할 종목, 넣을 금액, 상장일 매도 방법을 날짜순으로 보여 주는 한 장짜리 페이지입니다.
+`index.html` 은 GitHub Actions 가 매일 자동으로 다시 만듭니다.
 
-Write your name on line 6, save it, and then head back to GitHub Desktop.
+## 구성
+
+| 파일 | 역할 |
+|---|---|
+| `index.html` | 완성된 보드. 자동 생성되므로 직접 고치지 않습니다 |
+| `template.html` | 화면과 계산 로직. 디자인·규칙을 바꾸려면 이 파일을 고칩니다 |
+| `data/base.json` | 과거 통계(점수별 승률, 매도 방법별 성과 등). 고정값 |
+| `scripts/update.py` | 38커뮤니케이션(일정·수요예측 결과·종목 상세)과 네이버 차트(지수)를 읽어 `index.html` 생성 |
+| `.github/workflows/update.yml` | 한국시간 07:10 · 12:40 · 18:40 · 21:40 에 실행 |
+
+## 자동으로 바뀌는 것
+
+- 수요예측 결과(기관경쟁률·확약률·확정공모가)가 공시되면 점수와 결론이 자동으로 붙습니다
+- 청약·환불·상장 일정, 증권사별 물량, 일반청약 경쟁률
+- 코스닥·코스피 지수와 시장 모드(약세장/보통장), 최근 상장 12건 성적
+
+과거 통계 표는 고정이며, 수집이 실패하면 이전 `index.html` 을 그대로 두고 실행이 실패로 표시됩니다.
+
+## 손으로 실행
+
+Actions 탭 → "보드 자동 갱신" → Run workflow. 로컬에서는 `python3 scripts/update.py` (파이썬 3.9 이상, 추가 설치 없음).
+
+과거 통계와 모형 결과이며 특정 종목의 매수·매도 권유가 아닙니다.

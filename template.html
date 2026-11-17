@@ -1,0 +1,665 @@
+<title>공모주 당일매도 보드</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: 휴대폰 한 손 조작 — 하단 탭 5개(오늘·종목·계산·매도·근거), 각 탭은 한 줄 세로 스택. 첫 화면은 날짜순 할 일 목록. */
+:root{
+  --bg:#EEF1F4; --panel:#FFFFFF; --panel2:#F5F7F9; --ink:#111922; --mute:#5A6573; --line:#D7DDE4;
+  --up:#CF2B3C; --up-soft:#FBE8EA; --down:#1F55C8; --down-soft:#E6EDFB;
+  --go:#0B6B5C; --go-soft:#DDF0EC; --amber:#9A5F0C; --amber-soft:#FAEFDB; --bar:#2E8C7E;
+  --f-display:"Black Han Sans","IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --r:12px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0D1116; --panel:#161B22; --panel2:#1D232C; --ink:#E7EBF0; --mute:#98A2AF; --line:#2C333D;
+  --up:#FF6170; --up-soft:#3A1C21; --down:#7099FF; --down-soft:#1B2640;
+  --go:#4CC7B2; --go-soft:#12332E; --amber:#E7A940; --amber-soft:#3A2D16; --bar:#3FA796; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1116; --panel:#161B22; --panel2:#1D232C; --ink:#E7EBF0; --mute:#98A2AF; --line:#2C333D;
+  --up:#FF6170; --up-soft:#3A1C21; --down:#7099FF; --down-soft:#1B2640;
+  --go:#4CC7B2; --go-soft:#12332E; --amber:#E7A940; --amber-soft:#3A2D16; --bar:#3FA796; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:18px calc(96px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:720px;margin:0 auto;display:grid;gap:18px;grid-template-columns:minmax(0,1fr)}
+.view{display:grid;gap:18px;grid-template-columns:minmax(0,1fr)}
+h1,h2,h3,p{margin:0}
+h1{font:400 30px/1.1 var(--f-display);letter-spacing:.01em}
+h2{font:700 20px/1.3 var(--f-body);text-wrap:balance}
+h3{font:700 16px/1.35 var(--f-body)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.mute{color:var(--mute)} .small{font-size:14px} .tiny{font-size:12.5px}
+.up{color:var(--up)} .down{color:var(--down)}
+.lab{font-size:12px;letter-spacing:.05em;color:var(--mute);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+button{font-family:var(--f-body);color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.stamp{font:12.5px var(--f-num);color:var(--mute);text-align:right}
+/* 시장 */
+.mkt{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:12px;align-items:center;border-radius:var(--r);padding:14px 16px;border:1px solid var(--line);background:var(--panel)}
+.mkt.weak{border-color:var(--down);background:var(--down-soft)}
+.mkt b.mode{display:inline-block;font-size:13px;padding:4px 9px;border-radius:6px;background:var(--down);color:var(--panel);margin-bottom:6px}
+.mkt.ok b.mode{background:var(--go)}
+.mkt svg{width:100%;height:44px;display:block}
+/* 할 일 */
+.day{display:grid;gap:0}
+.dayh{display:flex;align-items:baseline;gap:8px;padding:6px 0}
+.dayh b{font-size:17px}
+.dayh.now b{color:var(--go)}
+.act{display:grid;grid-template-columns:52px minmax(0,1fr);gap:12px;align-items:start;padding:13px 14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;cursor:pointer;text-align:left;width:100%;font-size:15px;line-height:1.45}
+.act:hover{border-color:var(--mute)}
+.act.dim{background:transparent;border-style:dashed}
+.act .nm{font-weight:700;font-size:16px;display:block}
+.tag{font:700 13px/1 var(--f-body);padding:8px 0;border-radius:7px;text-align:center}
+.t-sell{background:var(--up);color:var(--panel)} .t-sub{background:var(--go);color:var(--panel)}
+.t-check{background:var(--amber-soft);color:var(--amber)} .t-pass{background:var(--panel2);color:var(--mute);border:1px solid var(--line)}
+/* 규칙 */
+.rules{list-style:none;margin:0;padding:0;display:grid;gap:0;counter-reset:r}
+.rules li{counter-increment:r;display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.rules li:first-child{border-top:0;padding-top:0}
+.rules li::before{content:counter(r);font:600 14px/26px var(--f-num);width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--panel);text-align:center}
+.rules b{display:block;font-size:16px}
+.rules span{font-size:14px;color:var(--mute)}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.kpi{background:var(--panel2);border-radius:10px;padding:12px}
+.kpi .v{font:600 23px/1.2 var(--f-num);font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12.5px;color:var(--mute);line-height:1.4;margin-top:2px}
+/* 폼 */
+label.f{display:grid;gap:4px;font-size:13px;color:var(--mute);font-weight:600;min-width:0}
+input,select{font:500 16px var(--f-num);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;width:100%}
+select{font-family:var(--f-body)}
+.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:600 14px var(--f-body);border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:8px 14px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.btn{font:700 15px var(--f-body);border:0;border-radius:9px;padding:12px 14px;background:var(--ink);color:var(--panel);cursor:pointer}
+.btn.ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+/* 종목 카드 */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;scroll-margin-top:12px}
+.card.hl{box-shadow:0 0 0 2px var(--go)}
+.ch{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:14px 16px 0;align-items:start}
+.ch .meta{font-size:13px;color:var(--mute);margin-top:2px}
+.vd{font:700 13.5px/1 var(--f-body);padding:8px 10px;border-radius:7px;white-space:nowrap}
+.v-prop{background:var(--go);color:var(--panel)} .v-eq{background:var(--go-soft);color:var(--go)}
+.v-pass{background:var(--panel2);color:var(--mute);border:1px solid var(--line)} .v-wait{background:var(--amber-soft);color:var(--amber)}
+.do{padding:10px 16px 14px;display:grid;gap:6px}
+.do .main{font-size:16px;font-weight:700;line-height:1.4}
+.do .sub{font-size:14px;color:var(--mute)}
+.sellbox{background:var(--up-soft);border-radius:9px;padding:11px 12px;font-size:14.5px;display:grid;gap:8px}
+.sellbox .held{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:10px;align-items:center;font-size:13.5px}
+details.more{border-top:1px solid var(--line)}
+details.more>summary{cursor:pointer;padding:11px 16px;font-size:14px;font-weight:600;color:var(--mute);list-style:none}
+details.more>summary::after{content:" ▾"} details.more[open]>summary::after{content:" ▴"}
+details.more>summary::-webkit-details-marker{display:none}
+.mb{padding:0 16px 16px;display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+.kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.kv .v{font:600 15px/1.3 var(--f-num);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.pips{display:flex;gap:3px;align-items:center}
+.pips i{width:13px;height:13px;border-radius:3px;background:var(--panel2);border:1px solid var(--line)}
+.pips i.on{background:var(--ink);border-color:var(--ink)}
+.parts{display:flex;flex-wrap:wrap;gap:6px}
+.parts span{font-size:12.5px;border:1px solid var(--line);border-radius:5px;padding:3px 7px;background:var(--panel2)}
+.flags{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.flags li{font-size:13.5px;line-height:1.45;padding-left:18px;position:relative}
+.flags li::before{content:"";position:absolute;left:2px;top:7px;width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.flags .good::before{background:var(--go)} .flags .bad::before{background:var(--up)}
+.scen{display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:3px;font-size:11.5px;text-align:center}
+.scen div{padding:6px 2px;border-radius:4px;line-height:1.2}
+.scen .h{color:var(--mute);font-weight:600;padding:4px 2px}
+.scen .rh{text-align:right;padding-right:6px;white-space:nowrap}
+.s-pass{background:var(--panel2);color:var(--mute)} .s-eq{background:var(--go-soft);color:var(--go);font-weight:700} .s-prop{background:var(--go);color:var(--panel);font-weight:700}
+/* 결과표 */
+.res{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.res div{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;font-size:14.5px}
+.res div+div{border-top:1px solid var(--line)}
+.res b{font:600 15px var(--f-num);text-align:right}
+.headline{font-size:15.5px;line-height:1.5;padding:13px 14px;border-radius:10px;background:var(--go-soft)}
+.headline b.big{font:600 24px var(--f-num)}
+.note{font-size:14px;line-height:1.5;padding:11px 12px;border-radius:9px;background:var(--panel2)}
+/* 타임라인 · 표 · 막대 */
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:grid;grid-template-columns:68px minmax(0,1fr);gap:12px;padding:11px 0;border-top:1px solid var(--line);font-size:14.5px}
+.tl li:first-child{border-top:0}
+.tl b{font:600 14.5px var(--f-num)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--mute);font-weight:600;font-size:12px}
+td:first-child,th:first-child{text-align:left;white-space:normal;min-width:120px}
+td.n{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+tr.em td{background:var(--go-soft);font-weight:600}
+.bars{display:grid;gap:7px}
+.brow{display:grid;grid-template-columns:86px minmax(0,1fr) 62px;gap:8px;align-items:center;font-size:13px}
+.brow .trk{height:16px;position:relative}
+.brow .trk i{position:absolute;top:0;bottom:0;border-radius:0 4px 4px 0;background:var(--bar)}
+.brow .trk i.neg{background:var(--down);border-radius:4px 0 0 4px}
+.brow .trk u{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--mute)}
+.brow b{font:600 13px var(--f-num);text-align:right}
+.recent{display:grid;gap:0}
+.recent div{display:grid;grid-template-columns:46px minmax(0,1fr) 62px 62px;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:13.5px;align-items:baseline}
+.recent div.h{border-top:0;color:var(--mute);font-size:12px;font-weight:600}
+.recent span:nth-child(n+3){text-align:right}
+.foot{font-size:12.5px;color:var(--mute);line-height:1.6}
+/* 하단 탭 */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:1px solid var(--line);
+  padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+nav.tabs div{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+nav.tabs button{border:0;background:transparent;border-radius:10px;padding:9px 2px;font:600 14px var(--f-body);color:var(--mute);cursor:pointer}
+nav.tabs button[aria-current="page"]{background:var(--ink);color:var(--panel)}
+nav.tabs button small{display:block;font:600 10.5px var(--f-num);opacity:.8;margin-top:1px}
+@media (min-width:700px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.kv{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div><div class="lab">청약에서 상장일 매도까지</div><h1>공모주 당일매도 보드</h1></div>
+    <div class="stamp" id="stamp"></div>
+  </header>
+
+  <!-- 오늘 -->
+  <section class="view" id="v-today">
+    <div class="mkt" id="mkt"></div>
+    <div style="display:grid;gap:4px">
+      <h2>앞으로 7일, 할 일</h2>
+      <div class="small mute">항목을 누르면 종목 상세로 이동합니다</div>
+    </div>
+    <div id="acts"></div>
+    <section class="panel">
+      <div><div class="lab">내 전략 · 손실 0 우선</div><h2>세 가지만 지킵니다</h2></div>
+      <ol class="rules" id="rules"></ol>
+      <div class="kpis" id="kpis"></div>
+      <div class="tiny mute" id="kpiNote"></div>
+    </section>
+    <section class="panel">
+      <div><h2>내 자금</h2><div class="small mute">여기 숫자에 맞춰 종목별 청약 금액과 마통 사용 여부를 계산합니다. 이 기기에만 저장됩니다.</div></div>
+      <div class="row3">
+        <label class="f">여유 현금(만원)<input id="setCash" type="number" inputmode="numeric" min="0" step="100"></label>
+        <label class="f">마통 한도(만원)<input id="setLoan" type="number" inputmode="numeric" min="0" step="100"></label>
+        <label class="f">마통 금리(%)<input id="setRate" type="number" inputmode="decimal" min="0" step="0.1"></label>
+      </div>
+      <div class="tiny mute">처음 값(현금 3,000만 · 마통 7,000만 · 연 5.0%)은 인터뷰 답변에서 잡은 가정입니다. 실제 값으로 바꾸세요.</div>
+    </section>
+  </section>
+
+  <!-- 종목 -->
+  <section class="view" id="v-stocks" hidden>
+    <div style="display:grid;gap:10px">
+      <h2>종목별 결론</h2>
+      <div class="chips" id="filters" role="group" aria-label="종목 필터"></div>
+    </div>
+    <div id="cards" style="display:grid;gap:12px"></div>
+  </section>
+
+  <!-- 계산 -->
+  <section class="view" id="v-calc" hidden>
+    <section class="panel" id="calc">
+      <div><h2>배정·수익 계산기</h2><div class="small mute">얼마를 넣으면 몇 주를 받고, 이자를 빼고 얼마가 남는지</div></div>
+      <label class="f">종목<select id="cStock"></select></label>
+      <label class="f">증권사<select id="cBroker"></select></label>
+      <div class="row2">
+        <label class="f">넣을 증거금(만원)<input id="cDep" type="number" inputmode="numeric" min="0" step="10"></label>
+        <label class="f">공모가(원)<input id="cOffer" type="number" inputmode="numeric" min="0"></label>
+      </div>
+      <div class="chips" id="cSteps"></div>
+      <div class="headline" id="cHead" aria-live="polite"></div>
+      <div class="res" id="cRes"></div>
+      <div class="note" id="cReco"></div>
+      <details><summary class="small" style="cursor:pointer;font-weight:600">가정 바꾸기 (청약건수 · 경쟁률 · 비용)</summary>
+        <div style="display:grid;gap:10px;margin-top:10px">
+          <div class="row2">
+            <label class="f">예상 청약건수<input id="cAcc" type="number" inputmode="numeric" min="1" step="10000"></label>
+            <label class="f">비례 경쟁률(:1)<input id="cProp" type="number" inputmode="decimal" min="1"></label>
+          </div>
+          <div class="row3">
+            <label class="f">묶이는 일수<input id="cDays" type="number" inputmode="numeric" min="1"></label>
+            <label class="f">청약수수료(원)<input id="cFee" type="number" inputmode="numeric" value="2000" min="0" step="500"></label>
+            <label class="f">매도 비용(%)<input id="cTax" type="number" inputmode="decimal" value="0.22" min="0" step="0.01"></label>
+          </div>
+          <div class="tiny mute" id="cHint"></div>
+        </div>
+      </details>
+    </section>
+    <section class="panel" id="scorer">
+      <div><h2>수요예측 채점기</h2><div class="small mute">결과가 공시되면 세 값만 넣으세요. 점수와 결론이 바로 나옵니다.</div></div>
+      <label class="f">종목<select id="sStock"></select></label>
+      <div class="row3">
+        <label class="f">기관경쟁률<input id="sComp" type="number" inputmode="decimal" placeholder="1200"></label>
+        <label class="f">확약률(%)<input id="sLock" type="number" inputmode="decimal" placeholder="8.5"></label>
+        <label class="f">확정공모가<input id="sOffer" type="number" inputmode="numeric"></label>
+      </div>
+      <div id="sOut" aria-live="polite"></div>
+      <div class="row2"><button class="btn" id="sApply" type="button">보드에 반영</button><button class="btn ghost" id="sClear" type="button">반영 취소</button></div>
+      <div class="tiny mute" id="sMsg"></div>
+    </section>
+  </section>
+
+  <!-- 매도 -->
+  <section class="view" id="v-sell" hidden>
+    <section class="panel">
+      <div><h2>상장일 아침 순서</h2><div class="small mute">08:30부터 09:30까지 한 시간이면 끝납니다</div></div>
+      <ol class="tl" id="pbTimeline"></ol>
+    </section>
+    <section class="panel">
+      <div><h3>상장일 최고가가 나온 시각</h3><div class="small mute" id="hiSub"></div></div>
+      <div class="bars" id="pbHigh"></div>
+    </section>
+    <section class="panel">
+      <div><h3>파는 방법별 성과</h3><div class="small mute">공모가 대비 · 분봉 277건. 색칠한 줄이 이 보드가 쓰는 방법입니다.</div></div>
+      <div class="tw"><table id="pbTable"></table></div>
+    </section>
+    <section class="panel">
+      <div><h3>점수대별로 어떤 방법이 나았나</h3><div class="small mute">평균 수익률 / 승률</div></div>
+      <div class="tw"><table id="intraTbl"></table></div>
+    </section>
+  </section>
+
+  <!-- 근거 -->
+  <section class="view" id="v-proof" hidden>
+    <section class="panel">
+      <div><h2>점수가 높으면 정말 안전했나</h2><div class="small mute" id="scSub"></div></div>
+      <div class="tw"><table id="scoreTbl"></table></div>
+      <div class="tiny mute">점수(최대 10점) = 확약률 0~4 + 기관경쟁률 0~3 + 공모가 위치 −2~1 + 공모규모 −1~1 + 직전 5건 분위기 −1~1</div>
+    </section>
+    <section class="panel">
+      <div><h3>이 규칙대로 했다면 · 연도별 손익</h3><div class="small mute">계좌 1개, 종목당 균등 1주, 청약수수료·세금 차감 후</div></div>
+      <div class="bars" id="yrBars"></div>
+      <div class="tw"><table id="worstTbl"></table></div>
+    </section>
+    <section class="panel">
+      <div><h3>언제 팔았어야 했나</h3><div class="small mute">보유기간별 수익률 중앙값 (공모가 대비, 현행 제도 257건)</div></div>
+      <div class="bars" id="holdBars"></div>
+    </section>
+    <section class="panel">
+      <div><h3>시장 국면별 성과</h3><div class="small mute">코스피·코스닥 상태별 시초가 승률과 첫날 종가 손실률</div></div>
+      <div class="tw"><table id="regTbl"></table></div>
+    </section>
+    <section class="panel">
+      <div><h3>최근 상장 12건</h3><div class="small mute">공모가 대비 시초가 / 첫날 종가</div></div>
+      <div class="recent" id="recent"></div>
+    </section>
+    <footer class="foot" id="foot"></footer>
+  </section>
+</div>
+
+<nav class="tabs" aria-label="화면 전환"><div id="tabs"></div></nav>
+
+<script id="data" type="application/json">/*DATA*/</script>
+<script>
+(function(){
+const B = JSON.parse(document.getElementById('data').textContent);
+const M = B.market, $ = s => document.querySelector(s), weak = !!M.weak_regime;
+const won = v => v==null||isNaN(v) ? '—' : Math.round(v).toLocaleString('ko-KR');
+const man = v => v==null||isNaN(v) ? '—' : (v>=1e8 ? (v/1e8).toFixed(v%1e8?2:0).replace(/\.?0+$/,'')+'억' : won(v/1e4)+'만');
+const pct = (v,d=0) => v==null||isNaN(v) ? '—' : (v>0?'+':v<0?'−':'')+Math.abs(v*100).toFixed(d)+'%';
+const pctp = (v,d=0) => v==null||isNaN(v) ? '—' : (v*100).toFixed(d)+'%';
+const cls = v => v>0?'up':v<0?'down':'';
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const D = s => s ? new Date(String(s).replace(/\./g,'-')+'T00:00:00') : null;
+const WK = ['일','월','화','수','목','금','토'];
+const md = d => (d.getMonth()+1)+'/'+d.getDate();
+const mdw = d => md(d)+'('+WK[d.getDay()]+')';
+const gen = new Date(B.generated+'T00:00:00');
+const nowD = new Date(); nowD.setHours(0,0,0,0);
+const today = nowD>gen ? nowD : gen;               // 갱신이 늦어도 '오늘'은 실제 날짜 기준
+const staleDays = Math.round((today-gen)/864e5);
+const dd = d => Math.round((d-today)/864e5);
+const items = B.items;
+const TAX0 = 0.0022, FEE0 = 2000;
+
+// ---------- 저장 ----------
+let S = {cash:3000, loan:7000, rate:5.0, held:{}, ov:{}};
+try{ const t=JSON.parse(localStorage.getItem('ipoBoard2')||'null'); if(t&&typeof t==='object') S=Object.assign(S,t); }catch(e){}
+const save = () => { try{ localStorage.setItem('ipoBoard2',JSON.stringify(S)); }catch(e){} };
+
+// ---------- 채점 · 결론 ----------
+const bucketOf = s => s>=9?0:s>=8?1:s>=6?2:s>=5?3:4;
+const PROP_MIN = weak?9:8;
+function scoreParts(it,c,l,o){
+  const amt = (it.total_shares_offer? it.total_shares_offer*o/1e6 : it.amount_mn)||0;
+  return {'확약률':l>=20?4:l>=10?3:l>=5?2:l>=1?1:0,'기관경쟁률':c>=1000?3:c>=500?2:c>=200?1:0,
+    '공모가 위치':o>=it.band_hi?1:(o<it.band_lo?-2:0),'공모규모':amt<=30000?1:(amt>=100000?-1:0),'시장분위기':M.hot5>=0.6?1:(M.hot5<0.2?-1:0)};
+}
+const sumParts = p => Object.values(p).reduce((a,b)=>a+b,0);
+function peerOf(it){
+  if(it.score==null) return null;
+  const row=B.score_tbl[bucketOf(it.score)]; const useW = weak&&row.weak&&row.weak.n>=8;
+  return Object.assign({label:`${row.bucket}점 ${useW?'약세장 ':''}${(useW?row.weak:row.all).n}건`}, useW?row.weak:row.all);
+}
+const tierOfScore = s => s>=PROP_MIN?'prop':s>=6?'eq':'pass';
+const VL = {prop:'균등+비례 청약', eq:'균등만 청약', pass:'패스', wait:'결과 대기'};
+function verdict(it){
+  if(it.spac) return {tier:'pass', why:'스팩은 1주 수익 중앙값(약 150원)이 청약수수료보다 작습니다'};
+  if(it.score!=null){
+    const t=tierOfScore(it.score), pe=peerOf(it);
+    const why = t==='pass' ? `${it.score}점. 같은 점수대 첫날 종가 승률 ${pctp(pe.close_win)}`
+      : `${it.score}점. 같은 점수대 시초가 승률 ${pctp(pe.open_win)} (${pe.label})`;
+    return {tier:t, why};
+  }
+  if(it.offer_fixed && it.offer && it.band_lo && it.offer<it.band_lo) return {tier:'pass', why:`공모가가 희망가 하단(${won(it.band_lo)}원) 아래로 확정됐습니다`};
+  return {tier:'wait', why:`수요예측 결과가 나오면 채점합니다 (${it.fcst_end?('마감 '+it.fcst_end.slice(5)):'일정 미정'})`};
+}
+function sellHow(it){
+  if(it.sell_plan && !it.userScored) return it.sell_plan.how;
+  if(it.score!=null && it.score>=6) return weak ? '절반은 동시호가, 절반은 장중 고점 대비 −5% 이탈 시 매도(늦어도 09:30)' : '장중 고점 대비 −3% 이탈 시 매도(늦어도 09:30)';
+  return '장전 동시호가(08:30~09:00)에 전량 매도';
+}
+function applyOv(){
+  items.forEach(it=>{ const o=S.ov[it.no]; if(!o||it.spac||(it.score!=null&&!it.userScored)) return;
+    it.inst_comp=o.c; it.lockup=o.l; it.offer=o.o; it.calc_offer=o.o; it.offer_fixed=true;
+    it.score_parts=scoreParts(it,o.c,o.l,o.o); it.score=sumParts(it.score_parts); it.userScored=true; });
+}
+const mainUw = it => (it.underwriters||[]).slice().sort((a,b)=>(b.shares_lo||0)-(a.shares_lo||0))[0]||{};
+const defaultAcc = u => Math.max(50000, Math.min(1200000, Math.round((u.shares_lo||0)/2/10000)*10000));
+const propOf = it => it.prop_comp || (it.retail_comp_pred? Math.round(it.retail_comp_pred*2) : (it.score!=null&&M.retail_comp_med_by_score[it.score]? Math.round(M.retail_comp_med_by_score[it.score]*2) : 2000));
+const daysOf = it => { const e=D(it.sub_end), r=D(it.refund); return e&&r ? Math.max(1,Math.round((r-e)/864e5)) : 2; };
+
+// 종목별 청약 계획: 손실 0 우선 → 마통은 '나쁜 경우(하위 10%)' 수익으로도 이자를 넘길 때만
+function plan(it){
+  const v=verdict(it), u=mainUw(it), off=it.calc_offer||0, mr=(it.margin_rate||50)/100;
+  const minDep=Math.round(10*off*mr), limDep=(u.limit_hi||Infinity)*off*mr;
+  const pe=peerOf(it), propC=propOf(it), days=daysOf(it), rate=(+S.rate||0)/100;
+  const be = propC*mr*rate*days/365;
+  const acc=defaultAcc(u), eq=(u.shares_lo||0)/2/acc;
+  let cashUse=minDep, loanUse=0, loanOK=false;
+  if(v.tier==='prop' && pe){
+    cashUse=Math.max(minDep, Math.min(S.cash*1e4, limDep));
+    loanOK = pe.open_p10 > be;
+    loanUse = loanOK ? Math.max(0, Math.min(S.loan*1e4, limDep-cashUse)) : 0;
+  }
+  const dep=cashUse+loanUse, q=off?Math.floor(dep/(off*mr)):0;
+  const pr = v.tier==='prop' ? q/propC : 0, sh=eq+pr;
+  const interest = loanUse*rate*days/365;
+  const pnl = r => sh*off*r - sh*off*(1+r)*TAX0 - FEE0 - interest;
+  return {v,u,off,mr,minDep,limDep,pe,propC,days,be,acc,eq,pr,sh,dep,cashUse,loanUse,loanOK,interest,pnl,q};
+}
+function phase(it){
+  const L=D(it.listing), s=D(it.sub_start), e=D(it.sub_end);
+  if(L && dd(L)===0) return 'listing';
+  if(e && e<today) return 'held';
+  if(s && e && s<=today && today<=e) return 'open';
+  return 'ahead';
+}
+
+// ---------- 헤더 · 시장 ----------
+$('#stamp').innerHTML = `${esc(B.updated_at||B.generated)} 갱신` + (staleDays>=2 ? `<br><b style="color:var(--up)">${staleDays}일째 갱신되지 않았습니다</b>` : '');
+function spark(vals){
+  const w=300,h=44,mn=Math.min(...vals),mx=Math.max(...vals), x=i=>i/(vals.length-1)*w, y=v=>h-4-(v-mn)/(mx-mn||1)*(h-8);
+  const pts=vals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="코스닥 60일 추이"><polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${x(vals.length-1)-3}" cy="${y(vals[vals.length-1])}" r="3.5" fill="var(--${weak?'down':'go'})"/></svg>`;
+}
+function renderMkt(){
+  $('#mkt').className='mkt '+(weak?'weak':'ok');
+  $('#mkt').innerHTML = `<div><b class="mode">${weak?'약세장 모드':'보통장 모드'}</b>
+    <div class="small">코스닥 <span class="num">${M.kosdaq_last}</span>, 20일 <b class="num ${cls(M.kosdaq_20d)}">${pct(M.kosdaq_20d,1)}</b>. 최근 상장 ${M.recent_n}건 중 <b>${M.recent_below_offer_close}건</b>이 첫날 종가에 공모가 아래.
+    ${weak?`그래서 비례 청약 기준을 ${PROP_MIN}점으로 올리고, 받은 주식은 절반을 동시호가에 먼저 팝니다.`:`${PROP_MIN}점 이상은 비례까지, 6~7점은 균등만.`}</div></div>
+    <div>${spark(M.kosdaq_60.map(r=>r[1]))}<div class="tiny mute" style="text-align:right">코스닥 60일</div></div>`;
+}
+
+// ---------- 오늘 할 일 ----------
+const KO = {sell:0,sub:1,check:2,pass:3};
+const TG = {sell:['t-sell','팔기'],sub:['t-sub','청약'],check:['t-check','확인'],pass:['t-pass','패스']};
+function buildActs(){
+  const A=[], H=7;
+  items.forEach((it,i)=>{
+    const p=plan(it), v=p.v, L=D(it.listing), s=D(it.sub_start), e=D(it.sub_end), f=D(it.fcst_end);
+    const held=+S.held[it.no]||0, br=esc(p.u.broker||'');
+    if(L && dd(L)>=0 && dd(L)<=H){
+      if(v.tier==='pass' && !held) A.push({d:L,k:'pass',i,t:`상장일. 청약하지 않은 종목입니다. 받았다면 동시호가에 전량 매도.`});
+      else A.push({d:L,k:'sell',i,t:`상장일${held?` · 보유 ${held}주`:''}. ${esc(sellHow(it))}. 08:50 예상체결가가 공모가 ${won(it.offer)}원 이하면 전량 동시호가.`});
+    }
+    if(s && e && dd(e)>=0 && dd(s)<=H){
+      const d = s<today?today:s, rng=`${md(s)}~${md(e)}`;
+      if(v.tier==='wait'){ if(!(f && f<today && s>today)) A.push({d,k:'check',i,t:`청약 ${rng}. 수요예측 결과를 채점한 뒤에 넣을지 정합니다.`}); }
+      else if(v.tier==='eq') A.push({d,k:'sub',i,t:`${br}에서 10주, <b class="num">${won(p.minDep)}원</b>만 청약 (${rng}, 마감일 16시 전). 더 넣지 않습니다.`});
+      else if(v.tier==='prop') A.push({d,k:'sub',i,t:`${br}에서 <b class="num">${man(p.dep)}원</b> 청약 (${rng}). ${p.loanUse?`마통 ${man(p.loanUse)}원 포함, 이자 약 ${won(p.interest)}원.`:`현금만 사용, 마통은 쓰지 않습니다.`} 마감일 오후에 넣으면 이자가 줄어듭니다.`});
+      else A.push({d,k:'pass',i,t:`청약 ${rng}. 넣지 않습니다. ${esc(v.why)}.`});
+    }
+    if(v.tier==='wait' && f){
+      if(f<today && s && s>today) A.push({d:today,k:'check',i,t:`청약 ${md(s)}~${md(e)} 전에 수요예측 결과(기관경쟁률·확약률·확정공모가)를 채점기에 넣으세요. 넣으면 청약 여부와 금액이 바로 나옵니다.`});
+    }
+  });
+  A.sort((a,b)=>a.d-b.d||KO[a.k]-KO[b.k]);
+  return A;
+}
+function renderActs(){
+  const A=buildActs(); let html='', cur=null;
+  if(!A.length) html='<div class="panel small mute">앞으로 7일 동안 할 일이 없습니다.</div>';
+  A.forEach(a=>{
+    const k=+a.d;
+    if(k!==cur){ if(cur!==null) html+='</div>'; cur=k; const n=dd(a.d);
+      html+=`<div class="day"><div class="dayh${n===0?' now':''}"><b>${n===0?'오늘':n===1?'내일':'D-'+n}</b><span class="small mute num">${mdw(a.d)}</span></div>`; }
+    const [tc,tl]=TG[a.k];
+    html+=`<button type="button" class="act${a.k==='pass'?' dim':''}" data-i="${a.i}"><span class="tag ${tc}">${tl}</span><span><span class="nm">${esc(items[a.i].name)}</span>${a.t}</span></button>`;
+  });
+  if(cur!==null) html+='</div>';
+  $('#acts').innerHTML=html;
+}
+$('#acts').addEventListener('click',e=>{const b=e.target.closest('.act'); if(b) goCard(+b.dataset.i);});
+
+function renderRules(){
+  const DO=B.dayone, st=DO.strategy, sk=DO.skipped, r6=B.score_tbl[2], cr=B.regime.crash;
+  $('#rules').innerHTML = [
+    [`6점 이상만 청약한다`,`5점 이하는 지금 같은 급락장에서 첫날 종가 손실이 ${pctp(cr['5점 이하'].loss)}였습니다 (${cr['5점 이하'].n}건). 6점 이상은 약세장에서도 시초가가 공모가 아래로 시작한 적이 없습니다 (${r6.weak.n+B.score_tbl[1].weak.n+B.score_tbl[0].weak.n}건).`],
+    [`6~7점은 10주만, ${PROP_MIN}점 이상만 큰돈을 넣는다`,`계좌가 하나라 균등 몫은 10주만 넣어도 같습니다. 비례에 마통을 쓰는 건 나쁜 경우(하위 10%) 수익으로도 이자를 넘길 때뿐입니다. 종목 카드가 자동으로 계산합니다.`],
+    [`상장일 09:30 전에 전부 판다`,`예상 시초가가 공모가 이하면 동시호가에 전량. 아니면 ${weak?'절반은 동시호가, 절반은 고점에서 5% 밀리면':'고점에서 3% 밀리면'} 매도. 종가까지 들고 가면 평균 수익이 ${pct(B.pb_table.find(r=>r.name.startsWith('동시호가')).mean)}에서 ${pct(B.pb_table.find(r=>r.name.startsWith('종가')).mean)}로 줄었습니다.`]
+  ].map(([b,s])=>`<li><div><b>${b}</b><span>${s}</span></div></li>`).join('');
+  $('#kpis').innerHTML = [
+    [pctp(st.win,1),`승률 · ${st.n}건 중 손실 ${st.loss_n}건`],
+    [`${won(st.worst_won)}원`,`가장 크게 잃은 한 번`],
+    [`${man(DO.per_year_won_1acct)}원`,`연평균 수익 · 균등 1주씩`],
+    [`${sk.loss_n}건`,`걸러낸 ${sk.n}건 중 손실로 끝난 종목`]
+  ].map(([v,s])=>`<div class="kpi"><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+  $('#kpiNote').textContent = `${DO.span[0]}~${DO.span[1]} 상장 ${DO.all_open.n}건에 이 규칙을 적용한 결과. 계좌 1개로 종목당 1주를 받았다고 가정, 청약수수료 ${won(DO.assume.fee)}원과 매도 비용 차감 후. 비례 배정 수익은 포함하지 않았습니다.`;
+}
+
+// ---------- 종목 카드 ----------
+let filt='go';
+const FL = [['go','청약·매도 대상'],['wait','결과 대기'],['pass','패스'],['all','전체']];
+function scenGrid(it){
+  if(!it.scen) return '';
+  const m = op => op.startsWith('적극')?'prop':op.startsWith('균등')?(8>=PROP_MIN?'eq':'eq'):'pass';
+  let h=`<div class="scen"><div class="h rh">기관경쟁률＼확약</div>${it.scen.cols.map(c=>`<div class="h">${esc(c)}</div>`).join('')}`;
+  it.scen.rows.forEach(r=>{ h+=`<div class="h rh">${esc(r.comp)}</div>`+r.cells.map(c=>{const t=tierOfScore(c.score); return `<div class="s-${t}" title="${c.score}점">${t==='prop'?'비례':t==='eq'?'균등':'패스'}</div>`;}).join(''); });
+  return `<div><div class="lab" style="margin-bottom:6px">결과가 이렇게 나오면 (밴드 상단 확정 가정)</div>${h}</div><div class="tiny mute" style="margin-top:6px">칸 = 그 결과일 때의 결론. 세로는 기관경쟁률, 가로는 확약률.</div></div>`;
+}
+function card(it,i){
+  const p=plan(it), v=p.v, ph=phase(it), pe=p.pe, held=+S.held[it.no]||0;
+  const dates=[it.sub_start?`청약 ${it.sub_start.slice(5)}~${(it.sub_end||'').slice(8)}`:'', it.listing?`상장 ${it.listing.slice(5)}`:'상장일 미정'].filter(Boolean).join(' · ');
+  let main='', sub=esc(v.why)+'.';
+  const canSub = ph==='ahead'||ph==='open';
+  if(canSub){
+    if(v.tier==='eq') main=`${esc(p.u.broker)}에서 10주, <span class="num">${won(p.minDep)}원</span>만 넣기`;
+    else if(v.tier==='prop'){ main=`${esc(p.u.broker)}에 <span class="num">${man(p.dep)}원</span> 넣기 → 약 ${p.sh.toFixed(1)}주 예상`;
+      sub+=` 비례 1주에 약 ${man(p.propC*p.off*p.mr)}원이 필요하고, ${p.days}일 이자를 넘기려면 <b class="num">${pct(p.be)}</b> 올라야 합니다. 나쁜 경우 예상이 <b class="num">${pct(pe.open_p10)}</b>라 마통은 ${p.loanOK?`써도 됩니다 (이자 약 ${won(p.interest)}원)`:'쓰지 않습니다'}.`; }
+    else if(v.tier==='wait') main=`아직 정하지 않습니다`;
+    else main=`청약하지 않습니다`;
+  } else {
+    main = v.tier==='pass'&&!held ? `청약 종료 · 넣지 않은 종목` : `청약 종료 · 상장일에 매도`;
+  }
+  let sell='';
+  if(!canSub && !it.spac){
+    const r = pe? pe.open_med : null;
+    sell=`<div class="sellbox"><div><b>${ph==='listing'?'오늘 상장':'상장 '+esc(it.listing||'미정')}.</b> ${esc(sellHow(it))}. 예상체결가가 공모가 <span class="num">${won(it.offer)}원</span> 이하면 전량 동시호가.</div>
+      <label class="held"><span>배정받은 주식 수${held&&r!=null?` · 중앙값 기준 예상 차익 <b class="num ${cls(r)}">${won(held*it.offer*r*(1-TAX0))}원</b>`:''}</span><input type="number" inputmode="numeric" min="0" id="held-${esc(it.no)}" data-held="${esc(it.no)}" value="${held||''}" placeholder="0"></label></div>`;
+  }
+  const sp=it.score_parts, mx=B.max_score||10;
+  const scoreBlock = it.score!=null ? `<div><div class="lab" style="margin-bottom:6px">점수${it.userScored?' (내가 채점)':''}</div><div style="display:flex;gap:10px;align-items:center"><b class="num" style="font-size:24px">${it.score}</b><span class="pips">${Array.from({length:mx},(_,k)=>`<i class="${k<it.score?'on':''}"></i>`).join('')}</span></div>
+     <div class="parts" style="margin-top:8px">${Object.entries(sp||{}).map(([k,x])=>`<span>${esc(k)} ${x>0?'+':''}${x}</span>`).join('')}</div></div>` : '';
+  const range = pe ? `<div><div class="lab" style="margin-bottom:6px">같은 점수대 시초가 (${esc(pe.label)})</div><div class="res">
+     <div><span>나쁜 경우 (하위 10%)</span><b class="${cls(pe.open_p10)}">${pct(pe.open_p10)}</b></div><div><span>보통 (중앙값)</span><b class="${cls(pe.open_med)}">${pct(pe.open_med)}</b></div><div><span>좋은 경우 (상위 25%)</span><b class="${cls(pe.open_p75)}">${pct(pe.open_p75)}</b></div></div></div>` : '';
+  const kv = [['공모가', it.offer?won(it.offer)+'원':`${won(it.band_lo)}~${won(it.band_hi)}`],['기관경쟁률', it.inst_comp?won(it.inst_comp)+':1':'—'],['확약률', it.lockup!=null?it.lockup+'%':'—'],
+    ['일반경쟁률', it.retail_comp?won(it.retail_comp)+':1':'—'],['공모금액', it.amount_mn?won(it.amount_mn/100)+'억':'—'],['상장일 유통', it.float_pct?it.float_pct+'%':'—'],
+    ['증권사', (it.underwriters||[]).map(u=>u.broker).join(', ')||'—'],['환불일', it.refund?it.refund.slice(5):'—'],['업종', it.sector||'—']]
+    .map(([k,x])=>`<div><div class="lab">${k}</div><div class="v">${esc(x)}</div></div>`).join('');
+  const flags = (it.flags||[]).length ? `<ul class="flags">${it.flags.map(([t,s])=>`<li class="${t==='good'?'good':t==='bad'?'bad':''}">${esc(s)}</li>`).join('')}</ul>` : '';
+  const tools = `<div class="row2">${v.tier==='wait'||it.userScored?`<button class="btn" type="button" data-score="${i}">채점하기</button>`:''}${canSub&&!it.spac&&it.calc_offer?`<button class="btn ghost" type="button" data-calc="${i}">금액 계산해 보기</button>`:''}</div>`;
+  return `<article class="card" id="card-${i}"><div class="ch"><div><h3>${esc(it.name)}</h3><div class="meta num">${esc(dates)}</div></div><span class="vd v-${v.tier}">${VL[v.tier]}</span></div>
+    <div class="do"><div class="main">${main}</div><div class="sub">${sub}</div>${sell}</div>
+    <details class="more"><summary>근거와 상세 지표</summary><div class="mb">${scoreBlock}${range}${v.tier==='wait'?scenGrid(it):''}<div class="kv">${kv}</div>${flags}${tools}</div></details></article>`;
+}
+function inFilt(it){
+  const t=verdict(it).tier, ph=phase(it), held=+S.held[it.no]||0;
+  if(filt==='all') return true;
+  if(filt==='wait') return t==='wait';
+  if(filt==='pass') return t==='pass'&&!held;
+  return t==='eq'||t==='prop'||held>0;
+}
+function renderCards(){
+  const cnt = f => { const o=filt; filt=f; const n=items.filter(inFilt).length; filt=o; return n; };
+  $('#filters').innerHTML=FL.map(([k,l])=>`<button type="button" class="chip" data-f="${k}" aria-pressed="${k===filt}">${l} ${cnt(k)}</button>`).join('');
+  const L=items.map((it,i)=>[it,i]).filter(([it])=>inFilt(it));
+  $('#cards').innerHTML = L.length ? L.map(([it,i])=>card(it,i)).join('') : `<div class="panel small mute">${filt==='go'?'지금 청약하거나 팔 종목이 없습니다. 결과 대기 종목을 채점하면 여기로 올라옵니다.':'해당 종목이 없습니다.'}</div>`;
+}
+$('#filters').addEventListener('click',e=>{const b=e.target.closest('[data-f]'); if(b){filt=b.dataset.f;renderCards();}});
+$('#cards').addEventListener('click',e=>{
+  const s=e.target.closest('[data-score]'), c=e.target.closest('[data-calc]');
+  if(s){ show('calc'); $('#sStock').value=s.dataset.score; resetScorer(); runScore(); $('#scorer').scrollIntoView({block:'start'}); }
+  if(c){ show('calc'); $('#cStock').value=c.dataset.calc; fillCalc(); calc(); $('#calc').scrollIntoView({block:'start'}); }
+});
+$('#cards').addEventListener('change',e=>{const el=e.target.closest('[data-held]'); if(!el) return;
+  const n=Math.max(0,Math.floor(+el.value||0)); if(n) S.held[el.dataset.held]=n; else delete S.held[el.dataset.held]; save(); renderActs(); renderCards(); });
+function goCard(i){ filt='all'; show('stocks'); renderCards(); const el=document.getElementById('card-'+i); if(!el) return;
+  el.querySelector('details').open=true; el.scrollIntoView({block:'start'}); el.classList.add('hl'); setTimeout(()=>el.classList.remove('hl'),1600); }
+
+// ---------- 계산기 ----------
+const calcable = items.map((it,i)=>[it,i]).filter(([it])=>it.calc_offer && (it.underwriters||[]).length);
+function fillStockSel(){ const cur=$('#cStock').value;
+  $('#cStock').innerHTML = calcable.map(([it,i])=>`<option value="${i}">${esc(it.name)} · ${VL[verdict(it).tier]}</option>`).join('');
+  if(cur && calcable.some(([,i])=>String(i)===cur)) $('#cStock').value=cur;
+  else { const f=calcable.find(([it])=>['ahead','open'].includes(phase(it))&&!it.spac); if(f) $('#cStock').value=f[1]; } }
+function fillCalc(keepBroker){
+  const it=items[+$('#cStock').value]; if(!it) return;
+  if(!keepBroker) $('#cBroker').innerHTML=it.underwriters.map((u,j)=>`<option value="${j}">${esc(u.broker)} · 일반 ${won(u.shares_lo)}주</option>`).join('');
+  const u=it.underwriters[+$('#cBroker').value]||it.underwriters[0], off=it.calc_offer, mr=(it.margin_rate||50)/100;
+  $('#cOffer').value=off; $('#cAcc').value=defaultAcc(u); $('#cProp').value=propOf(it); $('#cDays').value=daysOf(it);
+  const p=plan(it); $('#cDep').value=Math.round((p.v.tier==='prop'?p.dep:p.minDep)/1e4*10)/10;
+  const lim=(u.limit_hi||0)*off*mr;
+  const st=[['10주 최소',10*off*mr],['현금 전액',S.cash*1e4],['현금+마통',(S.cash+S.loan)*1e4]]; if(lim) st.push(['1인 한도',lim]);
+  $('#cSteps').innerHTML=st.map(([l,x])=>`<button type="button" class="chip" data-dep="${Math.round(x/1e4*10)/10}">${l} ${man(x)}</button>`).join('');
+  $('#cHint').innerHTML=(it.prop_comp?'비례 경쟁률은 실제 청약 결과입니다.':it.retail_comp_pred?'비례 경쟁률은 기관경쟁률·확약률로 추정한 값입니다.':'비례 경쟁률은 점수대 과거 중앙값으로 넣은 임시 값입니다.')+' 청약건수는 가정입니다. 청약 첫날 저녁 증권사 앱에 나오는 실제 건수로 바꾸면 정확해집니다. 묶이는 일수는 청약 마감일부터 환불일까지입니다.';
+}
+function calc(){
+  const it=items[+$('#cStock').value]; if(!it){ $('#cHead').textContent='계산할 종목이 없습니다.'; return; }
+  const u=it.underwriters[+$('#cBroker').value]||it.underwriters[0];
+  const off=+$('#cOffer').value||0, mr=(it.margin_rate||50)/100, dep=(+$('#cDep').value||0)*1e4;
+  const acc=Math.max(1,+$('#cAcc').value||1), prop=Math.max(1,+$('#cProp').value||1), days=Math.max(1,+$('#cDays').value||1);
+  const fee=+$('#cFee').value||0, tax=(+$('#cTax').value||0)/100, rate=(+S.rate||0)/100;
+  const lim=u.limit_hi||Infinity; let q=Math.floor(dep/(off*mr||1)); const capped=q>lim; q=Math.min(q,lim);
+  const used=q*off*mr, loan=Math.max(0,used-S.cash*1e4), interest=loan*rate*days/365;
+  const eq=q>=10?(u.shares_lo||0)/2/acc:0, pr=q>=10?q/prop:0, tot=eq+pr;
+  const pe=peerOf(it)||Object.assign({label:'점수 미정, 6~7점 가정'},B.score_tbl[2][weak?'weak':'all']);
+  const pnl=r=>tot*off*r-tot*off*(1+r)*tax-fee-interest;
+  const be=prop*mr*rate*days/365, needOne=prop*off*mr;
+  if(q<10){ $('#cHead').innerHTML=`<b class="big">0주</b><br><span class="small">최소 10주, ${won(10*off*mr)}원부터 청약할 수 있습니다.</span>`; $('#cRes').innerHTML=''; $('#cReco').innerHTML=''; return; }
+  $('#cHead').innerHTML=`받는 주식 <b class="big">약 ${tot.toFixed(1)}주</b><br><span class="small">보통의 경우 <b class="num ${cls(pnl(pe.open_med))}">${won(pnl(pe.open_med))}원</b>, 나쁜 경우 <b class="num ${cls(pnl(pe.open_p10))}">${won(pnl(pe.open_p10))}원</b> (이자·수수료 차감 후)</span>`;
+  $('#cRes').innerHTML=[
+    ['청약 수량',`${won(q)}주${capped?' (1인 한도)':''}`],
+    ['균등으로 받는 몫', eq>=1?`${eq.toFixed(2)}주`:`${pctp(eq)} 확률로 1주`],
+    ['비례로 받는 몫',`${pr.toFixed(2)}주`],
+    ['비례 1주에 필요한 증거금',`${man(needOne)}원`],
+    ['마통 사용액 · 이자', loan?`${man(loan)}원 · ${won(interest)}원`:'없음'],
+    ['마통으로 넣은 돈의 손익분기',`<span>${pct(be,1)}</span>`],
+    ['좋은 경우 (상위 25%)',`<span class="${cls(pnl(pe.open_p75))}">${won(pnl(pe.open_p75))}원</span>`]
+  ].map(([k,x])=>`<div><span>${k}</span><b>${x}</b></div>`).join('');
+  const t=verdict(it).tier; let r;
+  if(t==='pass') r=`<b>이 종목은 패스입니다.</b> 계산은 참고용으로만 보세요.`;
+  else if(t==='wait') r=`<b>아직 점수가 없습니다.</b> 6~7점이라고 가정한 숫자입니다. 채점 후 다시 보세요.`;
+  else if(t==='eq') r=`<b>10주(${won(10*off*mr)}원)만 넣는 종목입니다.</b> 균등 몫은 더 넣어도 늘지 않고, 비례 1주에 ${man(needOne)}원이 듭니다.`;
+  else r = pe.open_p10>be ? `<b>마통을 써도 됩니다.</b> 나쁜 경우 예상 ${pct(pe.open_p10)}가 손익분기 ${pct(be,1)}보다 높습니다. 마감일 오후에 넣어 이자 일수를 줄이세요.`
+       : `<b>현금까지만 넣으세요.</b> 마통으로 넣은 돈은 ${pct(be,1)} 넘게 올라야 이자를 넘기는데, 나쁜 경우 예상은 ${pct(pe.open_p10)}입니다.`;
+  $('#cReco').innerHTML=r+` <span class="tiny mute">(${esc(pe.label)} 기준)</span>`;
+}
+$('#cStock').addEventListener('change',()=>{fillCalc();calc();});
+$('#cBroker').addEventListener('change',()=>{fillCalc(true);calc();});
+['#cDep','#cOffer','#cAcc','#cProp','#cDays','#cFee','#cTax'].forEach(s=>$(s).addEventListener('input',calc));
+$('#cSteps').addEventListener('click',e=>{const b=e.target.closest('[data-dep]'); if(b){$('#cDep').value=b.dataset.dep;calc();}});
+
+// ---------- 채점기 ----------
+const pend = items.map((it,i)=>[it,i]).filter(([it])=>!it.spac);
+function fillScoreSel(){ const cur=$('#sStock').value;
+  $('#sStock').innerHTML=pend.map(([it,i])=>`<option value="${i}">${esc(it.name)} · ${it.score!=null?it.score+'점':esc(it.stage)}</option>`).join('');
+  if(cur) $('#sStock').value=cur; else { const f=pend.find(([it])=>it.score==null&&verdict(it).tier==='wait'); if(f) $('#sStock').value=f[1]; } }
+function resetScorer(){ const it=items[+$('#sStock').value]; if(!it) return;
+  $('#sComp').value=it.inst_comp||''; $('#sLock').value=it.inst_comp?(it.lockup??''):''; $('#sOffer').value=it.offer||it.band_hi||''; $('#sMsg').textContent=''; }
+function runScore(){
+  const it=items[+$('#sStock').value]; if(!it) return null;
+  const c=+$('#sComp').value, l=+$('#sLock').value||0, o=+$('#sOffer').value;
+  if(!c||!o){ $('#sOut').innerHTML=`<div class="note">희망가 ${won(it.band_lo)}~${won(it.band_hi)}원 · 공모금액 ${it.amount_mn?won(it.amount_mn/100)+'억':'—'}. 기관경쟁률과 확정공모가를 넣으세요.</div>`; return null; }
+  const parts=scoreParts(it,c,l,o), s=sumParts(parts), t=tierOfScore(s);
+  const row=B.score_tbl[bucketOf(s)], pe=(weak&&row.weak&&row.weak.n>=8)?row.weak:row.all;
+  $('#sOut').innerHTML=`<div class="headline"><b class="big">${s}점</b> <span class="vd v-${t}" style="margin-left:6px">${VL[t]}</span><br>
+    <span class="small">같은 점수대 ${pe.n}건: 시초가 승률 <b class="num">${pctp(pe.open_win)}</b>, 중앙값 <b class="num ${cls(pe.open_med)}">${pct(pe.open_med)}</b>, 나쁜 경우 <b class="num ${cls(pe.open_p10)}">${pct(pe.open_p10)}</b>, 첫날 종가 승률 <b class="num">${pctp(pe.close_win)}</b></span></div>
+    <div class="parts" style="margin-top:8px">${Object.entries(parts).map(([k,x])=>`<span>${esc(k)} ${x>0?'+':''}${x}</span>`).join('')}</div>`;
+  return {c,l,o,s};
+}
+$('#sStock').addEventListener('change',()=>{resetScorer();runScore();});
+['#sComp','#sLock','#sOffer'].forEach(s=>$(s).addEventListener('input',runScore));
+$('#sApply').addEventListener('click',()=>{ const it=items[+$('#sStock').value], r=runScore();
+  if(!it||!r){ $('#sMsg').textContent='기관경쟁률과 확정공모가를 먼저 넣으세요.'; return; }
+  if(it.score!=null&&!it.userScored){ $('#sMsg').textContent='이미 공시 결과로 채점된 종목이라 바꾸지 않았습니다.'; return; }
+  S.ov[it.no]={c:r.c,l:r.l,o:r.o}; save(); it.userScored=true; it.score=null; applyOv(); renderAll();
+  $('#sMsg').textContent=`${it.name}: ${r.s}점으로 반영했습니다. 오늘·종목 탭이 바뀌었습니다.`; });
+$('#sClear').addEventListener('click',()=>{ const it=items[+$('#sStock').value]; if(!it||!S.ov[it.no]){ $('#sMsg').textContent='반영한 채점이 없습니다.'; return; }
+  delete S.ov[it.no]; save(); $('#sMsg').textContent='반영을 취소했습니다. 새로 고치면 원래 상태로 돌아갑니다.'; });
+
+// ---------- 매도 · 근거 ----------
+function bars(el,rows,fmt,opt={}){
+  const vals=rows.map(r=>r[1]), mn=Math.min(0,...vals), mx=Math.max(0,...vals), span=(mx-mn)||1, z=(0-mn)/span*100;
+  $(el).innerHTML=rows.map(([l,v])=>{ const w=Math.abs(v)/span*100, left=v<0?z-w:z;
+    return `<div class="brow" title="${esc(l)}: ${fmt(v)}"><span>${esc(l)}</span><span class="trk">${mn<0?`<u style="left:${z}%"></u>`:''}<i class="${v<0?'neg':''}" style="left:${left}%;width:${Math.max(w,0.6)}%"></i></span><b class="${opt.color?cls(v):''}">${fmt(v)}</b></div>`; }).join('');
+}
+function renderStatic(){
+  $('#pbTimeline').innerHTML=B.timeline.map(([t,s])=>`<li><b>${esc(t)}</b><span>${esc(s)}</span></li>`).join('');
+  const ht=B.playbook.high_time; $('#hiSub').textContent=`분봉 ${B.intra_n}건. ${pctp(ht[0][1])}가 개장 후 첫 2분에 나왔습니다.`;
+  bars('#pbHigh',ht,v=>pctp(v));
+  const use = n => n.startsWith('동시호가')||(weak?n.startsWith('절반'):n.includes('−3%'));
+  $('#pbTable').innerHTML=`<tr><th>방법</th><th>평균</th><th>중앙값</th><th>승률</th><th>나쁜 경우</th></tr>`+B.pb_table.map(r=>`<tr class="${use(r.name)?'em':''}"><td>${esc(r.name)}</td><td class="n">${pct(r.mean)}</td><td class="n">${pct(r.median)}</td><td class="n">${pctp(r.win)}</td><td class="n ${cls(r.p10)}">${pct(r.p10,1)}</td></tr>`).join('');
+  const IB=B.intra_b, cols=[['open','동시호가'],['half','절반+−5%'],['trail3','−3% 추적'],['close','종가 보유']];
+  $('#intraTbl').innerHTML=`<tr><th>점수대</th>${cols.map(c=>`<th>${c[1]}</th>`).join('')}</tr>`+['8+','6-7','≤5'].map(k=>`<tr><td>${k}점 <span class="mute tiny">${IB[k].n}건</span></td>${cols.map(([c])=>`<td class="n">${pct(IB[k][c].mean)} / ${pctp(IB[k][c].win)}</td>`).join('')}</tr>`).join('');
+  $('#scSub').textContent=`현행 제도(2023.6~) ${B.sample.B}건. 괄호 안은 약세장만 따로 본 값입니다.`;
+  $('#scoreTbl').innerHTML=`<tr><th>점수</th><th>건수</th><th>시초가 승률</th><th>시초가 중앙값</th><th>나쁜 경우</th><th>종가 승률</th></tr>`+B.score_tbl.map((r,k)=>{const a=r.all,w=r.weak||{};
+    return `<tr class="${k<3?'em':''}"><td>${esc(r.bucket)}점 <span class="mute tiny">${k<=(PROP_MIN===9?0:1)?'비례':k<3?'균등':'패스'}</span></td><td class="n">${a.n} (${w.n??'—'})</td><td class="n">${pctp(a.open_win)} (${pctp(w.open_win)})</td><td class="n">${pct(a.open_med)} (${pct(w.open_med)})</td><td class="n ${cls(a.open_p10)}">${pct(a.open_p10)}</td><td class="n">${pctp(a.close_win)} (${pctp(w.close_win)})</td></tr>`;}).join('');
+  const DO=B.dayone;
+  bars('#yrBars',DO.by_year.map(y=>[`${y.year} · ${y.n}건`,y.won_sum]),v=>man(v)+'원');
+  $('#worstTbl').innerHTML=`<tr><th>가장 나빴던 6건</th><th>상장일</th><th>점수</th><th>1주 손익</th></tr>`+DO.worst_cases.map(w=>`<tr><td>${esc(w.name)}</td><td class="n">${esc(w.date)}</td><td class="n">${w.score}</td><td class="n ${cls(w.won)}">${won(w.won)}원</td></tr>`).join('');
+  const HN={A:'시초가',B:'첫날 종가',E:'2일차 시가',F:'5일차',G:'20일차',H:'60일차',I:'120일차',J:'250일차'};
+  bars('#holdBars',B.sell_tbl.filter(r=>HN[r.name[0]]&&r.name[1]===' ').map(r=>[HN[r.name[0]],r.median]),v=>pct(v),{color:true});
+  $('#regTbl').innerHTML=`<tr><th>코스피 / 코스닥</th><th>건수</th><th>시초가 승률</th><th>시초가 중앙값</th><th>종가 손실률</th></tr>`+B.regime.cross.map(r=>`<tr class="${r.kospi===M.regime_kospi&&r.kosdaq===M.regime_kosdaq?'em':''}"><td>${esc(r.kospi)} / ${esc(r.kosdaq)}</td><td class="n">${r.n}</td><td class="n">${pctp(r.open_win)}</td><td class="n">${pct(r.open_med)}</td><td class="n">${pctp(r.loss)}</td></tr>`).join('');
+  $('#recent').innerHTML=`<div class="h"><span>상장</span><span>종목 · 점수</span><span>시초가</span><span>종가</span></div>`+B.recent.map(r=>`<div><span class="num mute">${esc(r.date)}</span><span>${esc(r.name)} <span class="mute tiny">${r.score}점</span></span><span class="num ${cls(r.r_open)}">${pct(r.r_open)}</span><span class="num ${cls(r.r_close1)}">${pct(r.r_close1)}</span></div>`).join('');
+  $('#foot').innerHTML=B.footer+`<br><b>자동 갱신</b> 일정·수요예측 결과·청약 경쟁률·지수는 매일 자동으로 다시 읽어 옵니다(마지막 갱신 ${esc(B.updated_at||B.generated)}). 점수별 승률·매도 방법 같은 과거 통계 표는 ${esc(B.stats_asof||'')} 기준으로 고정돼 있습니다.<br><b>이 보드의 가정</b> 계좌 1개, 손실 회피 우선, 마통 이자는 청약 마감일부터 환불일까지 일할 계산. 균등 배정 수는 청약건수 가정에 따라 달라집니다.`;
+}
+
+// ---------- 탭 ----------
+const TABS=[['today','오늘'],['stocks','종목'],['calc','계산'],['sell','매도'],['proof','근거']];
+function show(name,push=true){
+  if(!TABS.some(t=>t[0]===name)) name='today';
+  TABS.forEach(([k])=>{ document.getElementById('v-'+k).hidden = k!==name; });
+  document.querySelectorAll('#tabs button').forEach(b=>{ if(b.dataset.t===name) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  if(push){ try{ if(location.hash!=='#'+name) history.replaceState(null,'','#'+name); }catch(e){} window.scrollTo(0,0); }
+}
+function renderTabs(){
+  const nGo=items.filter(it=>['eq','prop'].includes(verdict(it).tier)||+S.held[it.no]>0).length, nAct=buildActs().filter(a=>dd(a.d)===0&&a.k!=='pass').length;
+  const sm={today:nAct?nAct+'건':'', stocks:nGo?nGo+'종목':''};
+  const cur=(document.querySelector('#tabs button[aria-current]')||{}).dataset;
+  $('#tabs').innerHTML=TABS.map(([k,l])=>`<button type="button" data-t="${k}">${l}${sm[k]?`<small>${sm[k]}</small>`:''}</button>`).join('');
+  show(cur?cur.t:((location.hash||'').slice(1)||'today'),false);
+}
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]'); if(b) show(b.dataset.t);});
+window.addEventListener('hashchange',()=>show((location.hash||'').slice(1)||'today',false));
+
+// ---------- 설정 ----------
+$('#setCash').value=S.cash; $('#setLoan').value=S.loan; $('#setRate').value=S.rate;
+[['#setCash','cash'],['#setLoan','loan'],['#setRate','rate']].forEach(([s,k])=>$(s).addEventListener('input',()=>{ S[k]=Math.max(0,+$(s).value||0); save(); renderActs(); renderCards(); fillCalc(true); calc(); }));
+
+function renderAll(){ renderMkt(); renderActs(); renderRules(); renderCards(); fillStockSel(); fillCalc(); calc(); fillScoreSel(); renderTabs(); }
+applyOv(); renderStatic(); renderAll(); resetScorer(); runScore();
+})();
+</script>
