@@ -41,6 +41,17 @@ button{font-family:var(--f-body);color:var(--ink)}
 button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--go);outline-offset:2px}
 header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
 .stamp{font:12.5px var(--f-num);color:var(--mute);text-align:right}
+.hdr-r{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px 12px;margin-left:auto}
+.rbtns{display:flex;gap:6px;align-items:center}
+.refresh{font:700 14px var(--f-body);border:0;background:var(--ink);color:var(--panel);border-radius:999px;padding:9px 15px;cursor:pointer}
+.refresh:disabled{opacity:.55;cursor:wait}
+.rlink{font:600 13px var(--f-body);border:0;background:transparent;color:var(--mute);padding:9px 6px;cursor:pointer;text-decoration:underline}
+.rstat{font-size:14px;line-height:1.5;padding:11px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
+.rstat.ok{background:var(--go-soft);color:var(--go);border-color:transparent}
+.rstat.err{background:var(--up-soft);color:var(--up);border-color:transparent}
+.rstat a{color:inherit}
+#refreshPanel ol{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px;line-height:1.5}
+#refreshPanel a{color:var(--go);font-weight:600}
 /* 시장 */
 .mkt{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:12px;align-items:center;border-radius:var(--r);padding:11px 14px;border:1px solid var(--line);background:var(--panel)}
 .mkt.weak{border-color:var(--down);background:var(--down-soft)}
@@ -209,8 +220,13 @@ nav.tabs button small{display:block;font:600 10.5px var(--f-num);opacity:.8;marg
 <div class="wrap">
   <header class="top">
     <div><div class="lab">청약에서 상장일 매도까지</div><h1>공모주 당일매도 보드</h1></div>
-    <div class="stamp" id="stamp"></div>
+    <div class="hdr-r">
+      <div class="stamp" id="stamp"></div>
+      <div class="rbtns" id="rbtns" hidden><button type="button" class="rlink" id="refreshSet">설정</button><button type="button" class="refresh" id="refreshBtn">지금 갱신</button></div>
+    </div>
   </header>
+  <div class="rstat" id="refreshStat" aria-live="polite" hidden></div>
+  <section class="panel" id="refreshPanel" hidden></section>
 
   <!-- 오늘 -->
   <section class="view" id="v-today">
@@ -724,6 +740,108 @@ $('#setCash').value=S.cash; $('#setLoan').value=S.loan; $('#setRate').value=S.ra
 
 function renderAll(){ renderMkt(); renderToday(); renderRules(); renderCards(); fillStockSel(); fillCalc(); calc(); fillScoreSel(); renderTabs(); }
 applyOv(); renderStatic(); renderAll(); resetScorer(); runScore();
+
+// ---------- 지금 갱신 버튼 (github.io 에서만) ----------
+// 공개 페이지라 토큰을 페이지에 넣지 않는다. 사용자가 자기 기기에 한 번 등록한 토큰으로만 GitHub 실행을 요청한다.
+(function(){
+  if(!/\.github\.io$/.test(location.hostname)) return;
+  const OWNER=location.hostname.split('.')[0], REPO=location.pathname.split('/').filter(Boolean)[0]||'';
+  const WF='update.yml', RB=`https://api.github.com/repos/${OWNER}/${REPO}/actions`;
+  const ACT_URL=`https://github.com/${OWNER}/${REPO}/actions/workflows/${WF}`;
+  const NEW_TOKEN='https://github.com/settings/personal-access-tokens/new?name='+encodeURIComponent('공모주 보드 갱신')+'&expires_in=365&actions=write';
+  const KEY='ipoGhToken';
+  const tok={get(){ try{ return localStorage.getItem(KEY)||''; }catch(e){ return ''; } },
+             set(v){ try{ v?localStorage.setItem(KEY,v):localStorage.removeItem(KEY); return true; }catch(e){ return false; } }};
+  const btn=$('#refreshBtn'), panel=$('#refreshPanel'), stat=$('#refreshStat');
+  $('#rbtns').hidden=false;
+  const say=(msg,kind)=>{ stat.hidden=!msg; stat.className='rstat'+(kind?' '+kind:''); stat.innerHTML=msg||''; };
+  const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  const fail=msg=>{ const e=new Error(msg); e.ui=true; return e; };
+  const gh=(url,opt={})=>fetch(url,{...opt,cache:'no-store',headers:{'Authorization':'Bearer '+tok.get(),'Accept':'application/vnd.github+json',...(opt.headers||{})}});
+  const why=r=> r.status===401 ? '토큰이 틀렸거나 만료됐습니다. "설정"에서 토큰을 다시 등록하세요.'
+    : (r.status===403||r.status===404) ? '토큰 권한이 부족합니다. 저장소를 desktop-tutorial로, Actions 권한을 "Read and write"로 골랐는지 확인하세요.'
+    : `GitHub 응답 오류(${r.status})입니다. 잠시 뒤 다시 눌러 주세요.`;
+
+  function renderPanel(){
+    const has=!!tok.get();
+    panel.innerHTML = has
+      ? `<div><h2>지금 갱신</h2><div class="small mute">이 기기에 토큰이 등록돼 있습니다. "지금 갱신"을 누르면 1~3분 뒤 새 화면이 열립니다.</div></div>
+         <div class="row2"><button type="button" class="btn ghost" id="tokDel">토큰 지우기</button><button type="button" class="btn" id="panelClose">닫기</button></div>`
+      : `<div><h2>이 기기에서 바로 갱신하기</h2><div class="small mute">GitHub 토큰을 한 번 등록하면 "지금 갱신" 버튼으로 바로 갱신됩니다. 토큰은 이 기기의 브라우저에만 저장되고, 페이지나 저장소에는 올라가지 않습니다.</div></div>
+         <ol>
+           <li><a href="${NEW_TOKEN}" target="_blank" rel="noopener">GitHub 토큰 만들기 화면 열기</a> (로그인 필요)</li>
+           <li>Token name은 아무거나, Expiration은 1년 정도로 정합니다.</li>
+           <li>Repository access에서 <b>Only select repositories</b> → <b>${esc(REPO)}</b>만 고릅니다.</li>
+           <li>Permissions → Repository permissions에서 <b>Actions</b>를 <b>Read and write</b>로 바꿉니다. 다른 권한은 그대로 둡니다.</li>
+           <li><b>Generate token</b>을 누르고 나온 토큰(github_pat_로 시작)을 복사해 아래에 붙여 넣습니다.</li>
+         </ol>
+         <label class="f">토큰<input id="tokIn" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_..."></label>
+         <div class="row2"><button type="button" class="btn" id="tokSave">등록</button><button type="button" class="btn ghost" id="panelClose">닫기</button></div>
+         <div class="tiny mute">토큰 없이 갱신하려면 <a href="${ACT_URL}" target="_blank" rel="noopener">GitHub 실행 화면</a>에서 Run workflow를 누르세요.</div>`;
+  }
+  function openPanel(){ renderPanel(); panel.hidden=false; panel.scrollIntoView({block:'nearest'}); }
+  panel.addEventListener('click',async e=>{
+    const id=e.target.id;
+    if(id==='panelClose'){ panel.hidden=true; }
+    else if(id==='tokDel'){ tok.set(''); say('토큰을 지웠습니다.'); renderPanel(); }
+    else if(id==='tokSave'){
+      const v=($('#tokIn').value||'').trim();
+      if(!/^(github_pat_|ghp_)\w{20,}$/.test(v)){ say('토큰 모양이 맞지 않습니다. github_pat_로 시작하는 값을 통째로 붙여 넣으세요.','err'); return; }
+      const prev=tok.get(); if(!tok.set(v)){ say('이 브라우저에서는 저장할 수 없습니다(사생활 보호 모드 등).','err'); return; }
+      say('토큰을 확인하는 중…');
+      try{
+        const r=await gh(`${RB}/workflows/${WF}`);
+        if(!r.ok){ tok.set(prev); say(why(r),'err'); return; }
+        say('토큰을 등록했습니다. 이제 "지금 갱신"을 누르면 됩니다.','ok'); panel.hidden=true;
+      }catch(err){ tok.set(prev); say('GitHub에 연결하지 못했습니다. 인터넷 연결을 확인하세요.','err'); }
+    }
+  });
+  $('#refreshSet').addEventListener('click',()=>{ panel.hidden ? openPanel() : (panel.hidden=true); });
+
+  let busy=false;
+  btn.addEventListener('click',async ()=>{
+    if(busy) return;
+    if(!tok.get()){ openPanel(); return; }
+    busy=true; btn.disabled=true; const t0=Date.now();
+    try{
+      say('GitHub에 갱신을 요청하는 중…');
+      let r=await gh(`${RB}/workflows/${WF}/runs?branch=main&per_page=5`);
+      if(!r.ok) throw fail(why(r));
+      let target=((await r.json()).workflow_runs||[]).find(x=>x.status!=='completed');
+      if(!target){
+        r=await gh(`${RB}/workflows/${WF}/dispatches`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref:'main'})});
+        if(!r.ok) throw fail(why(r));
+        for(let i=0;i<24&&!target;i++){
+          await wait(5000);
+          const q=await gh(`${RB}/workflows/${WF}/runs?event=workflow_dispatch&branch=main&per_page=5`);
+          if(q.ok) target=((await q.json()).workflow_runs||[]).find(x=>Date.parse(x.created_at)>=t0-60e3);
+        }
+        if(!target) throw fail('요청은 보냈지만 실행이 시작되지 않았습니다. 잠시 뒤 다시 눌러 주세요.');
+      }
+      say('공시와 지수를 모으는 중… (1~2분)');
+      let done=null;
+      for(let i=0;i<60&&!done;i++){
+        await wait(5000);
+        const q=await gh(`${RB}/runs/${target.id}`);
+        if(q.ok){ const j=await q.json(); if(j.status==='completed') done=j; }
+      }
+      if(!done) throw fail('수집이 오래 걸리고 있습니다. 몇 분 뒤 화면을 새로 고쳐 보세요.');
+      if(done.conclusion!=='success') throw fail(`수집에 실패했습니다. 자료 사이트 문제일 수 있으니 잠시 뒤 다시 눌러 주세요. <a href="${esc(done.html_url)}" target="_blank" rel="noopener">실행 기록 보기</a>`);
+      say('새 화면을 게시하는 중… (30초~1분)');
+      for(let i=0;i<36;i++){
+        await wait(5000);
+        try{
+          const p=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
+          const m=(await p.text()).match(/"updated_at":"([^"]+)"/);
+          if(m&&m[1]!==B.updated_at){ say('갱신을 마쳤습니다. 새 화면을 엽니다.','ok'); location.replace(location.pathname+'?v='+encodeURIComponent(m[1])+location.hash); return; }
+        }catch(e){}
+      }
+      throw fail('갱신은 끝났지만 게시가 늦어지고 있습니다. 1~2분 뒤 새로 고쳐 주세요.');
+    }catch(e){
+      say(e.ui ? e.message : 'GitHub에 연결하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.','err');
+    }finally{ busy=false; btn.disabled=false; }
+  });
+})();
 
 // ---------- 열 때마다 최신 확인 (github.io 에서만) ----------
 // 홈 화면 앱이나 브라우저가 예전 페이지를 기억하고 있어도, 화면이 다시 보일 때 서버의 최신본과 비교해 바뀌었으면 새로 연다.
