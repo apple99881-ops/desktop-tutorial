@@ -59,7 +59,7 @@ header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:1
 .mkt.ok b.mode{background:var(--go)}
 .mkt svg{width:100%;height:34px;display:block}
 /* 오늘 · 종목 묶음 */
-.k-sell{--c:var(--up);--cs:var(--up-soft)} .k-sub{--c:var(--go);--cs:var(--go-soft)} .k-wait{--c:var(--amber);--cs:var(--amber-soft)} .k-pass{--c:var(--mute);--cs:var(--panel2)}
+.k-gone{--c:var(--ink);--cs:var(--panel2)} .k-sell{--c:var(--up);--cs:var(--up-soft)} .k-sub{--c:var(--go);--cs:var(--go-soft)} .k-wait{--c:var(--amber);--cs:var(--amber-soft)} .k-pass{--c:var(--mute);--cs:var(--panel2)}
 .blk{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 .blkh{display:flex;align-items:center;gap:10px}
 .blkh h2{font-size:21px}
@@ -89,6 +89,9 @@ header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:1
 .wkd:first-child{padding-top:0}
 .wr{display:grid;grid-template-columns:50px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-top:1px solid var(--line);padding:10px 0;font-size:15px;cursor:pointer}
 .wr .nm{font-weight:600;overflow-wrap:anywhere}
+a.wr{color:inherit;text-decoration:none}
+.wr .go{font-size:12.5px;color:var(--go);font-weight:600;white-space:nowrap}
+.tg.k-gone{background:var(--ink);color:var(--panel)} .tg.k-chg{background:var(--amber);color:var(--panel)}
 .wr .nt{font-size:13px;color:var(--mute);text-align:right;white-space:nowrap}
 .tg{font:700 12px/1 var(--f-body);padding:6px 0;border-radius:6px;text-align:center;background:var(--cs);color:var(--c)}
 .k-sell .tg,.tg.k-sell{background:var(--up);color:var(--panel)} .tg.k-sub{background:var(--go);color:var(--panel)}
@@ -487,7 +490,7 @@ function subBig(it,p){
   return `10주 · <span class="num">${won(p.minDep)}원</span><small>${esc(p.u.broker)} · 균등 몫만 받습니다. 더 넣지 않습니다</small>`;
 }
 function facts(it,kind){
-  const f=[]; if(it.score!=null) f.push(`점수 <b>${it.score}</b>`);
+  const f=[]; if(it.changed) f.push(`일정 변경 <b>${esc(chgText(it.changed))}</b>`); if(it.score!=null) f.push(`점수 <b>${it.score}</b>`);
   if(kind==='sub'){ if(it.sub_end) f.push(`마감 <b>${mdw(D(it.sub_end))}</b> 16시`); if(it.refund) f.push(`환불 <b>${md(D(it.refund))}</b>`); if(it.listing) f.push(`상장 <b>${md(D(it.listing))}</b>`); }
   else { f.push(`공모가 <b>${won(it.offer)}원</b>`); if(it.retail_comp) f.push(`일반경쟁률 <b>${won(it.retail_comp)}:1</b>`); }
   return `<div class="facts">${f.map(x=>`<span>${x}</span>`).join('')}</div>`;
@@ -524,6 +527,23 @@ function heroCard(it,i,g,where){
   return `<article class="hero k-${g}" ${where==='S'?`id="card-${i}"`:`data-go="${i}" tabindex="0" role="link"`}><div class="hd"><span class="dday">${dday}</span><h3>${esc(it.name)}</h3><span class="when">${when}</span></div><div class="bd">${body}</div>${more}</article>`;
 }
 
+// ---------- 철회·일정 변경 ----------
+const DART_VIEW = rcp => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${encodeURIComponent(rcp)}`;
+const ymd = s => { const d=D(s); return d?md(d):''; };
+const GONE = (B.gone||[]).slice().sort((a,b)=>(b.since||'').localeCompare(a.since||''));
+const chgText = c => `${c.what} ${ymd(c.from)} → ${ymd(c.to)}`;
+function eventRows(maxDays){
+  const fresh = s => !maxDays || (D(s.replace(/-/g,'.')) && (today-D(s.replace(/-/g,'.')))/864e5<=maxDays);
+  const g = GONE.filter(x=>fresh(x.since)).map(x=>{
+    const was = x.sub_start?`청약 예정일 ${ymd(x.sub_start)}`:'';
+    if(x.kind==='철회') return `<a class="wr" href="${x.rcp?DART_VIEW(x.rcp):'#'}" target="_blank" rel="noopener"><span class="tg k-gone">철회</span><span class="nm">${esc(x.name)}<br><span class="tiny mute">${x.date?ymd(x.date)+' 철회':'DART에 철회 표시'} · ${was}</span></span><span class="go">공시 ›</span></a>`;
+    return `<div class="wr" style="cursor:default"><span class="tg">확인 중</span><span class="nm">${esc(x.name)}<br><span class="tiny mute">38 일정표에서 빠짐 · 철회인지 DART에서 확인 중 · ${was}</span></span><span class="nt"></span></div>`;
+  });
+  const c = items.map((it,i)=>[it,i]).filter(([it])=>it.changed&&fresh(it.changed.since)).map(([it,i])=>
+    `<button type="button" class="wr" data-go="${i}"><span class="tg k-chg">변경</span><span class="nm">${esc(it.name)}<br><span class="tiny mute">${esc(chgText(it.changed))}</span></span><span class="go">보기 ›</span></button>`);
+  return g.concat(c);
+}
+
 // ---------- 오늘 ----------
 function renderToday(){
   const G=items.map((it,i)=>({it,i,g:groupOf(it),ph:phase(it)}));
@@ -534,8 +554,10 @@ function renderToday(){
   if(subT.length) h+=`<div class="blk k-sub"><div class="blkh"><h2>오늘 청약</h2><span class="cnt">${subT.length}</span><span class="hint">마감일 16시 전</span></div>${subT.map(x=>heroCard(x.it,x.i,'sub','T')).join('')}</div>`;
   if(!sellT.length&&!subT.length){
     const nx=weekEvents(60).find(e=>e.k==='sell'||e.k==='sub');
-    h+=`<div class="empty"><b>오늘은 팔거나 청약할 종목이 없습니다</b><span class="small mute">${nx?`다음 할 일: ${mdw(nx.d)} ${esc(items[nx.i].name)} ${nx.k==='sell'?'매도':'청약'}`:'예정된 청약·매도 대상도 아직 없습니다'}</span></div>`;
+    h+=`<div class="empty"><b>오늘은 팔거나 청약할 종목이 없습니다</b><span class="small mute">${nx?`다음 할 일: ${mdw(nx.d)} ${esc(items[nx.i].name)} ${nx.k==='sell'?'매도':'청약'}`:(()=>{const n=G.filter(x=>x.g==='wait').length; return n?`결과 대기 ${n}종목은 수요예측 결과가 공시되면 청약할지 정해집니다`:'예정된 청약·매도 대상이 없습니다';})()}</span></div>`;
   }
+  const ER=eventRows(7);
+  if(ER.length) h+=`<div class="blk k-gone"><div class="blkh"><h2>철회·일정 변경</h2><span class="cnt">${ER.length}</span><span class="hint">최근 7일</span></div><div class="panel" style="gap:0;padding:4px 16px">${ER.map((r,k)=>k?r:r.replace('class="wr"','class="wr" style="border-top:0"')).join('')}</div></div>`;
   if(waitT.length) h+=`<div class="blk k-wait"><div class="blkh"><h2>결과 기다리는 중</h2><span class="cnt">${waitT.length}</span><span class="hint">공시되면 자동 반영</span></div><div class="panel" style="gap:0;padding:4px 16px">${waitT.map(x=>{const s=D(x.it.sub_start),e=D(x.it.sub_end);
       return `<button type="button" class="wr" data-go="${x.i}" style="${x===waitT[0]?'border-top:0':''}"><span class="tg">${x.ph==='open'?'청약 중':dlab(s)}</span><span class="nm">${esc(x.it.name)}</span><span class="nt">청약 ${md(s)}~${md(e)}</span></button>`;}).join('')}</div>
       <div class="tiny mute">수요예측 결과가 아직 공시되지 않아 청약 여부를 정하지 않았습니다. 먼저 알게 되면 종목을 눌러 직접 채점할 수 있습니다.</div></div>`;
@@ -577,7 +599,7 @@ function renderRules(){
 }
 
 // ---------- 종목 ----------
-const openGrp = {wait:false, pass:false};
+const openGrp = {wait:false, pass:false, gone:false};
 function renderCards(){
   const G=items.map((it,i)=>({it,i,g:groupOf(it)})), by=g=>G.filter(x=>x.g===g);
   const far=new Date(2999,0,1), key=(x,f)=>D(x.it[f])||far;
@@ -589,7 +611,8 @@ function renderCards(){
   $('#groups').innerHTML =
     blk('sell','팔 종목','청약 끝 · 상장일에 매도',sell,'상장을 기다리는 보유 종목이 없습니다.')+
     blk('sub','청약할 종목','점수 6점 이상',sub,'지금 청약 대상으로 확정된 종목이 없습니다. 결과 대기 종목의 수요예측 결과가 공시되면 여기로 올라옵니다.')+
-    grp('wait','결과 대기',wait,wait.map(x=>row(x,x.it.sub_start?`청약 ${md(D(x.it.sub_start))}~${md(D(x.it.sub_end))}`:'일정 미정',x.it.fcst_end?`수요예측 ${x.it.fcst_start.slice(5)}~${x.it.fcst_end.slice(5)} · 결과 공시되면 자동 채점`:'')).join(''))+
+    grp('wait','결과 대기',wait,wait.map(x=>row(x,x.it.sub_start?`청약 ${md(D(x.it.sub_start))}~${md(D(x.it.sub_end))}`:'일정 미정',(x.it.changed?`<b style="color:var(--amber)">${esc(chgText(x.it.changed))}</b> · `:'')+(x.it.fcst_end?`수요예측 ${x.it.fcst_start.slice(5)}~${x.it.fcst_end.slice(5)} · 결과 공시되면 자동 채점`:''))).join(''))+
+    (()=>{ const ER=eventRows(0); return ER.length?`<details class="grp k-gone" data-grp="gone" ${openGrp.gone?'open':''}><summary>철회·일정 변경<span class="cnt">${ER.length}</span></summary><div style="padding:0 16px 6px">${ER.join('')}</div></details>`:''; })()+
     grp('pass','패스',pass,pass.map(x=>row(x,x.it.listing?`상장 ${md(D(x.it.listing))}`:(x.it.sub_start?`청약 ${md(D(x.it.sub_start))}`:''),esc(verdict(x.it).why))).join(''));
 }
 document.addEventListener('toggle',e=>{ const g=e.target.dataset&&e.target.dataset.grp; if(g) openGrp[g]=e.target.open; },true);
