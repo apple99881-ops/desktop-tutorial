@@ -37,6 +37,9 @@ def log(*a):
 
 # ---------------------------------------------------------------- 수집
 def fixture_name(url):
+    m = re.search(r"dart\.fss\.or\.kr/dsac001/mainG\.do\?selectDate=([\d.]+)&currentPage=(\d+)", url)
+    if m:
+        return f"dart_{m.group(1)}_{m.group(2)}.html"
     m = re.search(r"symbol=(\w+)", url)
     if m:
         return f"naver_fchart_{m.group(1).lower()}.xml"
@@ -324,6 +327,128 @@ def finish_item(it, today, hot5):
     return it
 
 
+# ---------------------------------------------------------------- 철회·일정 변경
+# 38커뮤니케이션은 공모를 철회한 종목을 설명 없이 일정표에서 지운다.
+# 그래서 직전 보드에 있던 종목이 사라지면 DART 기타법인 공시 목록에서 철회신고서를 찾아 이유를 붙인다.
+DART_LIST = "https://dart.fss.or.kr/dsac001/mainG.do?selectDate={}&currentPage={}"
+EVENTS = os.path.join(ROOT, "data", "events.json")
+GONE_KEEP_DAYS = 14     # 철회·사라짐을 보드에 남겨 두는 기간
+CHANGE_KEEP_DAYS = 7    # 일정 변경 표시를 남겨 두는 기간
+_dart_days = {}
+
+
+def norm_name(s):
+    return re.sub(r"\(.*?\)|㈜|주식회사|\s", "", s or "")
+
+
+def same_corp(a, b):
+    a, b = norm_name(a), norm_name(b)
+    if not a or not b:
+        return False
+    return a == b or (min(len(a), len(b)) >= 4 and (a.startswith(b) or b.startswith(a)))
+
+
+def dart_day(d):
+    """그날 DART 기타법인(비상장) 공시 목록. 공모 준비 회사는 상장 전이라 여기에 나온다."""
+    if d in _dart_days:
+        return _dart_days[d]
+    out = []
+    for page in range(1, 8):
+        doc = fetch(DART_LIST.format(d.strftime("%Y.%m.%d"), page), enc="utf-8")
+        if not doc:
+            break
+        n = 0
+        for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", doc, re.S | re.I):
+            c = [clean(x) for x in re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S | re.I)]
+            m = re.search(r"rcpNo=(\d+)", tr)
+            if len(c) >= 5 and m:
+                n += 1
+                out.append({"time": c[0], "corp": re.sub(r"^[유코넥기]\s+", "", c[1]), "report": c[2],
+                            "rcp": m.group(1), "rm": c[5] if len(c) > 5 else ""})
+        if n < 100:
+            break
+        if not FIX:
+            time.sleep(0.3)
+    _dart_days[d] = out
+    return out
+
+
+def find_withdrawal(name, start, end):
+    """start~end 사이 DART 공시에서 그 회사의 철회신고서(또는 '철회됨' 표시)를 찾는다."""
+    marked = None
+    d = end
+    while d >= start:
+        if d.weekday() < 5:
+            for r in dart_day(d):
+                if not same_corp(r["corp"], name):
+                    continue
+                if "철회신고서" in r["report"]:
+                    return {"kind": "철회", "date": d.strftime("%Y.%m.%d"), "time": r["time"], "rcp": r["rcp"]}
+                if "철" in r["rm"] and not marked:
+                    marked = {"kind": "철회", "date": None, "time": None, "rcp": r["rcp"]}
+        d -= dt.timedelta(days=1)
+    return marked
+
+
+def load_events():
+    try:
+        ev = json.load(open(EVENTS, encoding="utf8"))
+    except Exception:
+        ev = {}
+    return {"gone": ev.get("gone", []), "changes": ev.get("changes", [])}
+
+
+def prev_board():
+    try:
+        s = open(os.path.join(ROOT, "index.html"), encoding="utf8").read()
+        m = re.search(r'<script id="data" type="application/json">(.*?)</script>', s, re.S)
+        return json.loads(m.group(1)) if m else {}
+    except Exception as e:  # noqa: BLE001
+        log("이전 보드를 읽지 못했습니다:", repr(e))
+        return {}
+
+
+def track_events(items, listed_nos, today):
+    ev, prev = load_events(), prev_board()
+    prev_items = {p["no"]: p for p in prev.get("items", []) if p.get("no")}
+    cur = {it["no"]: it for it in items}
+    known = {g["no"] for g in ev["gone"]}
+
+    def ended(p):
+        L, se = pdate(p.get("listing")), pdate(p.get("sub_end"))
+        return (L and L < today) or (se and (today - se).days > 25)
+
+    vanished = [p for no, p in prev_items.items() if no not in cur and no not in listed_nos and no not in known and not ended(p)]
+    if len(vanished) > 4:
+        log("한 번에 사라진 종목이 너무 많아 수집 문제로 보고 기록하지 않습니다:", [p["name"] for p in vanished])
+        vanished = []
+    for p in vanished:
+        log("일정표에서 사라짐:", p["name"])
+        ev["gone"].append({"no": p["no"], "name": p["name"], "since": today.isoformat(), "kind": "확인 필요",
+                           "sub_start": p.get("sub_start"), "sub_end": p.get("sub_end")})
+    for g in ev["gone"]:
+        if g.get("kind") != "철회" or not g.get("date"):
+            since = pdate(g["since"]) or today
+            hit = find_withdrawal(g["name"], max(since - dt.timedelta(days=7), today - dt.timedelta(days=GONE_KEEP_DAYS + 7)), today)
+            if hit and (hit.get("date") or g.get("kind") != "철회"):
+                g.update(hit)
+                log("DART 철회 확인:", g["name"], hit)
+    ev["gone"] = [g for g in ev["gone"] if g["no"] not in cur and (today - pdate(g["since"])).days <= GONE_KEEP_DAYS]
+
+    for no, it in cur.items():
+        p = prev_items.get(no)
+        if p and p.get("sub_start") and it.get("sub_start") and p["sub_start"] != it["sub_start"]:
+            ch = {"no": no, "name": it["name"], "what": "청약일", "from": p["sub_start"], "to": it["sub_start"], "since": today.isoformat()}
+            if not any(c["no"] == no and c["to"] == ch["to"] for c in ev["changes"]):
+                ev["changes"].append(ch)
+                log("일정 변경:", it["name"], ch["from"], "→", ch["to"])
+    ev["changes"] = [c for c in ev["changes"] if c["no"] in cur and (today - pdate(c["since"])).days <= CHANGE_KEEP_DAYS]
+    for c in ev["changes"]:
+        cur[c["no"]]["changed"] = c
+    json.dump(ev, open(EVENTS, "w", encoding="utf8"), ensure_ascii=False, indent=1)
+    return ev
+
+
 # ---------------------------------------------------------------- 시장
 def index_series(symbol):
     doc = fetch(FCHART.format(symbol))
@@ -419,7 +544,10 @@ def main():
     far = dt.date(2999, 1, 1)
     items.sort(key=lambda it: (pdate(it["listing"]) or far, pdate(it["sub_start"]) or far))
 
+    ev = track_events(items, {x["no"] for x in listed}, today)
+
     data = dict(base)
+    data["gone"] = ev["gone"]
     data["generated"] = today.isoformat()
     data["updated_at"] = now.strftime("%Y-%m-%d %H:%M")
     m = dict(base["market"])
@@ -441,6 +569,8 @@ def main():
         f"{'약세장' if m['weak_regime'] else '보통장'} 모드 · hot5 {hot5:.3f}")
     for it in items:
         log(f"  {it['name']}: {it['stage']} · 점수 {it['score']} · 청약 {it['sub_start']}~{it['sub_end']} · 상장 {it['listing']}")
+    for g in ev["gone"]:
+        log(f"  [사라짐] {g['name']}: {g['kind']} {g.get('date') or ''} {g.get('rcp') or ''}")
 
 
 if __name__ == "__main__":
